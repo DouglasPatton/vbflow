@@ -13,6 +13,7 @@ class VBHelper:
         self.scorer_list=None
         self.max_k=None
         self.estimator_dict=None
+        self.lastmodel=None
 
         
     
@@ -40,17 +41,6 @@ class VBHelper:
             fig.show()
             
             
-    def printTestandCVScores(self, estimator_name,cv_score_dict_means):
-        model=estimator_dict[estimator_name]()
-        model.fit(X_train,y_train)
-        if test_share:
-            y_test_hat=model.predict(X_test)
-            print(f'test set: negative-mse={-mean_squared_error(y_test,y_test_hat)}')
-        for scorer in self.scorer_list:
-            print(f'cv avg: {scorer}= {cv_score_dict_means[estimator_name][scorer]}')
-            
-  
-
 
 class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
     def __init__(self,max_k=500):
