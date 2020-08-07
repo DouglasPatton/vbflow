@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.linear_model import ElasticNetCV, LinearRegression, Lars
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import make_scorer
 
 class VBHelper:
     def __init__(self,test_share,cv_folds,cv_reps,cv_count,rs):
@@ -10,10 +12,11 @@ class VBHelper:
         self.cv_reps=cv_reps
         self.cv_count=cv_count
         self.rs=rs
+        
+        # below are added in the notebook
         self.scorer_list=None
         self.max_k=None
         self.estimator_dict=None
-        self.lastmodel=None
 
         
     
@@ -60,31 +63,58 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
         return self
     
     def transform(self,X):
-        n_samples_transform = X.shape[0]
+        self.n_samples_transform = X.shape[0]
+        #Xout=np.zeros(X.shape,dtype=np.float64)
+        #Xout[:,self.col_select]=X[:,self.col_select]
         return X[:,self.col_select]
-            
+        #print(Xout.shape)
+        #return Xout
 
-from sklearn.compose import TransformedTargetRegressor
 
-class MultiCV(BaseEstimator,TransformerMixin):
-    def __init__(self,max_k=500,estimator=None,transform_dict=None,scorer='neg_mean_squared_error'):
-        self.max_k=max_k
-        if estimator is None:
-            assert False, 'not developed'
-        self.estimator=estimator
-        if transform_dict is None:
-            transform_dict={'none':{'func':lambda x: x,
-                                  'inverse_func': lambda x: x},
-                            'log':{'func':lambda x: np.log(x0),
-                                  'inverse_func': lambda x: np.exp(x)}}
-        self.transform_dict=transform_dict
-        
+#from sklearn.compose import TransformedTargetRegressor
+
+class logminplus1_T(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
     def fit(self,X,y=None):
-        for t_name,transform in transform_dict.items():
-            TransformedTargetRegressor(regressor=estimator,**transform)
-            TPipe=make_pipeline(transform,estimator)
-        
-        
+        self.min_x=np.min(X)
+        return self
+    def transform(self,X,y=None):
+        return np.log(X-self.min_x+1)
+    def inverse_transform(self,X,y=None):
+        return np.exp(X)-1+self.min_x
+    
+class logminus_T(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        return self
+    def transform(self,X,y=None):
+        return np.sign(y)*np.log(np.abs(y))
+    def inverse_transform(self,X,y=None):
+        return np.exp(X)
+           
+class exp_T(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        pass
+    def transform(self,X,y=None):
+        return np.exp(X)
+    def inverse_transform(self,X,y=None):
+        xout=np.zeros(X.shape)
+        xout[X>0]=np.log(X[X>0])
+        return xout  
+    
+class none_T(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        return self
+    def transform(self,X):
+        return X
+    def inverse_transform(self,X):
+        return X  
     
         
     
