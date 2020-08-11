@@ -74,12 +74,30 @@ class logminplus1_T(BaseEstimator,TransformerMixin):
     def __init__(self):
         pass
     def fit(self,X,y=None):
-        self.min_x=np.min(X)
+        self.x_min_=np.min(X)
         return self
     def transform(self,X,y=None):
-        return np.log(X-self.min_x+1)
+        return np.log(X-self.x_min_+1)
     def inverse_transform(self,X,y=None):
-        return np.exp(X)-1+self.min_x
+        return np.exp(X)-1+self.x_min_
+
+class logp1_T(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        xmin=X.min()
+        if xmin<0:
+            self.min_shift_=-xmin
+        else:
+            self.min_shift_=0
+        return self
+    
+    def transform(self,X,y=None):
+        
+        return np.log1p(X+self.min_shift_)
+        
+    def inverse_transform(self,X,y=None):
+        return np.expm1(X)#-self.min_shift_
     
 class logminus_T(BaseEstimator,TransformerMixin):
     def __init__(self):
