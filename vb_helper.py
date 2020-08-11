@@ -97,7 +97,7 @@ class logp1_T(BaseEstimator,TransformerMixin):
         return np.log1p(X+self.min_shift_)
         
     def inverse_transform(self,X,y=None):
-        return np.expm1(X)#-self.min_shift_
+        return np.expm1(X)-self.min_shift_
     
 class logminus_T(BaseEstimator,TransformerMixin):
     def __init__(self):
