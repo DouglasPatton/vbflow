@@ -46,29 +46,26 @@ class VBHelper:
             
 
 class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
-    def __init__(self,max_k=500):
+    def __init__(self,max_k=500,selector=None):
         self.max_k=max_k
-        
+        if selector is None:
+            self.selector='Lars' 
+        else: self.selector=selector
+            
         
     def fit(self,X,y):
         assert not y is None,f'y:{y}'
-        self.n_samples_fit_ = X.shape[0]
+        if self.selector=='Lars':
+            selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
+        elif self.selector=='elastic-net':
+            selector=ElasticNetCV()
         k=X.shape[1]
-        if k>self.max_k:
-            lars=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k) #the magic
-            lars.fit(X,y)
-            self.col_select=np.arange(k)[lars.coef_>0]
-        else:
-            self.col_select=np.arange(k)
+        selector.fit(X,y)
+        self.col_select=np.arange(k)[selector.coef_>0]
         return self
     
     def transform(self,X):
-        self.n_samples_transform = X.shape[0]
-        #Xout=np.zeros(X.shape,dtype=np.float64)
-        #Xout[:,self.col_select]=X[:,self.col_select]
         return X[:,self.col_select]
-        #print(Xout.shape)
-        #return Xout
 
 
 #from sklearn.compose import TransformedTargetRegressor
