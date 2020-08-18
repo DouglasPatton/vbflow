@@ -63,11 +63,15 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
             selector=self.selector
         k=X.shape[1]
         selector.fit(X,y)
-        self.col_select=np.arange(k)[np.abs(selector.coef_)>0]
+        self.col_select_=np.arange(k)[np.abs(selector.coef_)>0.0001]
+        #print(f'self.col_select_:{self.col_select_}')
+        if self.col_select_.size<1:
+            self.col_select_=np.arange(1)
+            #print (f'selector.coef_:{selector.coef_}')
         return self
     
     def transform(self,X):
-        return X[:,self.col_select]
+        return X[:,self.col_select_]
 
 
 #from sklearn.compose import TransformedTargetRegressor
