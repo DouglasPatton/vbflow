@@ -69,7 +69,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
                 
             if self.strategy=='impute_middle':
                 numeric_T=('num_imputer', SimpleImputer(strategy='mean'),self.float_idx_)
-                cat_imputer=make_pipeline(SimpleImputer(strategy='median'),OneHotEncoder())
+                cat_imputer=make_pipeline(SimpleImputer(strategy='median'),OneHotEncoder(sparse=False,drop=None))
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
             if self.strategy[:10]=='impute_knn':
                 if len(self.strategy)==10:
@@ -79,8 +79,10 @@ class missingValHandler(BaseEstimator,TransformerMixin):
                 numeric_T=('num_imputer', KNNImputer(strategy='mean'),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='median'),OneHotEncoder(sparse=False,drop=None))
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
-        
-        return ColumnTransformer(transformers=[numeric_T,categorical_T]).fit_transform(X,y)
+        T=ColumnTransformer(transformers=[numeric_T,categorical_T])
+        T.fit(X,y)
+        X=T.transform(X)
+        return X
     
     
             
