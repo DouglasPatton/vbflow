@@ -18,7 +18,6 @@ class VBHelper:
         self.max_k=None
         self.estimator_dict=None
 
-        
     
     def plotCVScores(self,cv_score_dict,sort=1):
         colors = ['r', 'g', 'b', 'm', 'c', 'y', 'k']    
@@ -44,7 +43,19 @@ class VBHelper:
             #fig.show()
             
             
-
+class missingValHandler(BaseEstimator,TransformerMixin):
+    # https://scikit-learn.org/stable/auto_examples/compose/plot_column_transformer_mixed_types.html#use-columntransformer-by-selecting-column-by-names
+    def __init__(self,strategy='drop_row'):
+        self.strategy=strategy
+        
+    def fit(self,X,y):
+        if self.strategy=='drop_row':
+            pass
+            
+    
+    
+            
+            
 class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
     def __init__(self,max_k=500,selector=None):
         self.max_k=max_k
