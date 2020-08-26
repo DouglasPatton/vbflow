@@ -53,7 +53,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
     def fit(self,X,y):
         return self
         
-    def transform(self,X,y):
+    def transform(self,X):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
         self.X_dtypes_=dict(X_df.dtypes)
