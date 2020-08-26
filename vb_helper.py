@@ -2,8 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.linear_model import ElasticNetCV, LinearRegression, Lars
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import make_scorer
+from sklearn.metrics import mean_squared_error, make_scorer
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.pipeline import make_pipeline
 
 class VBHelper:
     def __init__(self,test_share,cv_folds,cv_reps,cv_count,rs):
@@ -49,9 +51,36 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         self.strategy=strategy
         
     def fit(self,X,y):
-        if self.strategy=='drop_row':
-            pass
+        pass
+        
+    def transform(self,X,y):
+        if type(X)!=pd.DataFrame:
+            X=pd.DataFrame(X)
+        self.X_dtypes_=dict(X_df.dtypes)
+        self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
+        self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
             
+        xvars=list(X.columns)
+        if type(self.strategy) is str:
+            if self.strategy=='drop_row':
+                X=X.dropna(axis=0) # overwrite it
+                numeric_T=('no_transform',self.none_T,self.float_idx_)
+                categorical_T=('cat_drop_hot',OneHotEncoder(sparse=False,drop=None),self.obj_idx)
+                
+            if self.strategy=='impute_middle':
+                numeric_T=('num_imputer', SimpleImputer(strategy='mean'),self.float_idx_)
+                cat_imputer=make_pipeline(SimpleImputer(strategy='median'),OneHotEncoder())
+                categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
+            if self.strategy[:10]=='impute_knn':
+                if len(self.strategy)==10:
+                    k=5
+                else:
+                    k=int(''.join([char for char in self.strategy[10:] if char.isdigit()]))
+                numeric_T=('num_imputer', KNNImputer(strategy='mean'),self.float_idx_)
+                cat_imputer=make_pipeline(SimpleImputer(strategy='median'),OneHotEncoder(sparse=False,drop=None))
+                categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
+        
+        return ColumnTransformer(transformers=[numeric_T,categorical_T]).fit_transform(X,y)
     
     
             
@@ -110,7 +139,7 @@ class logp1_T(BaseEstimator,TransformerMixin):
         return self
     
     def transform(self,X,y=None):
-        X[X<-self.min_shift_]=-self.min_shift_ # added to avoid np.log(neg)
+        X[X<-self.min_shift_]=-self.min_shift_ # added to avoid np.log(neg), really np.log(<1) b/c 0+1=1
         return np.log1p(X+self.min_shift_)
         
     def inverse_transform(self,X,y=None):
