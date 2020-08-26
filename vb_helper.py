@@ -51,7 +51,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         self.strategy=strategy
         
     def fit(self,X,y):
-        pass
+        return self
         
     def transform(self,X,y):
         if type(X)!=pd.DataFrame:
