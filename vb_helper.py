@@ -86,7 +86,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
                 if len(self.strategy)==10:
                     k=5
                 else:
-                    k=int(''.join([char for char in self.strategy[10:] if char.isdigit()]))
+                    k=int(''.join([char for char in self.strategy[10:] if char.isdigit()])) #extract k from the end
                 numeric_T=('num_imputer', KNNImputer(strategy='mean'),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
