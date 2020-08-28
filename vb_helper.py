@@ -46,13 +46,33 @@ class VBHelper:
             ax.xaxis.set_visible(False)
             ax.legend(loc=4)
             #fig.show()
+
+class dropConst(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        if type(X) is np.ndarray:
+            X_df=pd.DataFrame(X)
+        else:
+            X_df=X
+        self.unique_=X_df.apply(pd.Series.nunique)
+        return self
+    def transform(self,X):
+        if type(X) is pd.DataFrame:
+            return X.loc[:,self.unique_>1]
+        else:
+            return X[:,self.unique_>1]
+  
+    
+        
+                
             
             
 class missingValHandler(BaseEstimator,TransformerMixin):
     # https://scikit-learn.org/stable/auto_examples/compose/plot_column_transformer_mixed_types.html#use-columntransformer-by-selecting-column-by-names
-    def __init__(self,strategy='drop_row'):
+    def __init__(self,strategy='drop_row',transformer=None):
         self.strategy=strategy
-        
+        self.transformer=transformer
     def fit(self,X,y):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
@@ -75,6 +95,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         if type(self.strategy) is str:
             if self.strategy=='drop_row':
                 X=X.dropna(axis=0) # overwrite it
+                
                 numeric_T=('no_transform',self.none_T,self.float_idx_)
                 categorical_T=('cat_drop_hot',cat_encoder,self.obj_idx)
                 
@@ -93,6 +114,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         T=ColumnTransformer(transformers=[numeric_T,categorical_T])
         T.fit(X,y)
         X=T.transform(X)
+        #print(X)
         return X
     
     
@@ -101,13 +123,13 @@ class missingValHandler(BaseEstimator,TransformerMixin):
 class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
     def __init__(self,max_k=500,selector=None):
         self.max_k=max_k
-        if selector is None:
-            self.selector='Lars' 
-        else: self.selector=selector
+        self.selector=selector
             
         
     def fit(self,X,y):
         assert not y is None,f'y:{y}'
+        if self.selector is None:
+            self.selector='Lars'
         if self.selector=='Lars':
             selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
         elif self.selector=='elastic-net':
