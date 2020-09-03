@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import ElasticNetCV, LinearRegression, Lars
+from sklearn.linear_model import ElasticNet, LinearRegression, Lars
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
@@ -68,7 +68,7 @@ class dropConst(BaseEstimator,TransformerMixin):
                 
             
             
-class missingValHandler(BaseEstimator,TransformerMixin):
+"""class missingValHandler(BaseEstimator,TransformerMixin):
     # https://scikit-learn.org/stable/auto_examples/compose/plot_column_transformer_mixed_types.html#use-columntransformer-by-selecting-column-by-names
     def __init__(self,strategy='drop_row',transformer=None):
         self.strategy=strategy
@@ -118,7 +118,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         T.fit(X,y)
         X=T.transform(X)
         #print(X)
-        return X
+        return X"""
     
     
             
@@ -136,7 +136,7 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
         if self.selector=='Lars':
             selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
         elif self.selector=='elastic-net':
-            selector=ElasticNetCV()
+            selector=ElasticNet()
         else:
             selector=self.selector
         k=X.shape[1]
