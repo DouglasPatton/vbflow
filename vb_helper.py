@@ -93,6 +93,9 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         cat_encoder=OneHotEncoder(categories=self.cat_list,sparse=False,) # drop='first'
         xvars=list(X.columns)
         if type(self.strategy) is str:
+            if self.strategy=='pass-through':
+                numeric_T=('no_transform',self.none_T(),self.float_idx_)
+                categorical_T=('cat_drop_hot',cat_encoder,self.obj_idx)
             if self.strategy=='drop_row':
                 X=X.dropna(axis=0) # overwrite it
                 
