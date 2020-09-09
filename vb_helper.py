@@ -1,3 +1,4 @@
+import logging
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -22,6 +23,7 @@ class VBHelper:
         self.scorer_list=None
         self.max_k=None
         self.estimator_dict=None
+        self.logger=logging.getLogger()
 
     
     def plotCVScores(self,cv_score_dict,sort=1):
@@ -49,6 +51,7 @@ class VBHelper:
 
 class dropConst(BaseEstimator,TransformerMixin):
     def __init__(self):
+        self.logger=logging.getLogger()
         pass
     def fit(self,X,y=None):
         if type(X) is np.ndarray:
@@ -125,6 +128,7 @@ class dropConst(BaseEstimator,TransformerMixin):
             
 class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
     def __init__(self,max_k=500,selector=None):
+        self.logger=logging.getLogger()
         self.max_k=max_k
         self.selector=selector
             
@@ -136,7 +140,7 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
         if self.selector=='Lars':
             selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
         elif self.selector=='elastic-net':
-            selector=ElasticNet()
+            selector=ElasticNet(fit_intercept=True,selection='random')
         else:
             selector=self.selector
         k=X.shape[1]
@@ -167,6 +171,7 @@ class logminplus1_T(BaseEstimator,TransformerMixin):
 
 class logp1_T(BaseEstimator,TransformerMixin):
     def __init__(self):
+        self.logger=logging.getLogger()
         pass
     def fit(self,X,y=None):
         xmin=X.min()
@@ -174,14 +179,19 @@ class logp1_T(BaseEstimator,TransformerMixin):
             self.min_shift_=-xmin
         else:
             self.min_shift_=0
+        self.logger.debug(f'logp1_T fitting with self.min_shift:{self.min_shift_}')
         return self
     
     def transform(self,X,y=None):
         X[X<-self.min_shift_]=-self.min_shift_ # added to avoid np.log(neg), really np.log(<1) b/c 0+1=1
-        return np.log1p(X+self.min_shift_)
+        XT=np.log1p(X+self.min_shift_)
+        self.logger.info(f'logp1_T transforming XT nulls:{np.isnan(XT).sum()}')
+        return  XT
         
     def inverse_transform(self,X,y=None):
-        return np.expm1(X)-self.min_shift_
+        XiT=np.expm1(X)-self.min_shift_
+        self.logger.info(f'logp1_T inv transforming XiT nulls:{np.isnan(XiT).sum()}')
+        return XiT
     
 class logminus_T(BaseEstimator,TransformerMixin):
     def __init__(self):

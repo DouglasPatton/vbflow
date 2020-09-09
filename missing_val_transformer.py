@@ -1,3 +1,4 @@
+import logging
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -20,6 +21,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
     def __init__(self,strategy='drop_row',transformer=None):
         self.strategy=strategy
         self.transformer=transformer
+        self.logger=logging.getLogger()
     def fit(self,X,y):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
@@ -31,6 +33,18 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
         self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
         self.cat_list=[X.iloc[:,idx].unique() for idx in self.obj_idx_]
+        x_nan_count=X.isnull().sum().sum() # sums by column and then across columns
+        try:
+            y_nan_count=y.isnull().sum().sum()
+        except:
+            try:y_nan_count=np.isnan(y).sum()
+            except:
+                if not y is None:
+                    y_nan_count='error'
+                    self.logger.exception(f'error summing nulls for y, type(y):{type(y)}')
+                else:
+                    pass
+        self.logger.info(f'x_nan_count:{x_nan_count}, y_nan_count:{y_nan_count}')
         return self
         
     def transform(self,X,y=None):
@@ -64,5 +78,13 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         T=ColumnTransformer(transformers=[numeric_T,categorical_T])
         T.fit(X,y)
         X=T.transform(X)
+        x_nan_count=np.isnan(X).sum() # sums by column and then across columns
+        """try:
+            y_nan_count=y.isnull().sum().sum()
+        except:
+            y_nan_count='error'
+            self.logger.exception('error summing nulls for y')"""
+        if x_nan_count>0:
+            self.logger.info(f'x_nan_count is non-zero! x_nan_count:{x_nan_count}')
         #print(X)
         return X
