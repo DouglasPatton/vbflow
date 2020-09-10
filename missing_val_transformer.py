@@ -54,6 +54,9 @@ class missingValHandler(BaseEstimator,TransformerMixin):
         cat_encoder=OneHotEncoder(categories=self.cat_list,sparse=False,) # drop='first'
         xvars=list(X.columns)
         if type(self.strategy) is str:
+            if self.strategy=='drop':
+                assert False, 'develop drop columns with >X% missing vals then drop rows with missing vals'
+                
             if self.strategy=='pass-through':
                 numeric_T=('no_transform',none_T(),self.float_idx_)
                 categorical_T=('cat_drop_hot',cat_encoder,self.obj_idx_)
@@ -72,7 +75,7 @@ class missingValHandler(BaseEstimator,TransformerMixin):
                     k=5
                 else:
                     k=int(''.join([char for char in self.strategy[10:] if char.isdigit()])) #extract k from the end
-                numeric_T=('num_imputer', KNNImputer(strategy='mean'),self.float_idx_)
+                numeric_T=('num_imputer', KNNImputer(n_neighbors=k),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
         T=ColumnTransformer(transformers=[numeric_T,categorical_T])
