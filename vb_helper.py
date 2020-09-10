@@ -140,7 +140,7 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
         if self.selector=='Lars':
             selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
         elif self.selector=='elastic-net':
-            selector=ElasticNet(fit_intercept=True,selection='random')
+            selector=ElasticNet(fit_intercept=True,selection='random',tol=0.1,max_iter=500,warm_start=1)
         else:
             selector=self.selector
         k=X.shape[1]
@@ -191,6 +191,10 @@ class logp1_T(BaseEstimator,TransformerMixin):
     def inverse_transform(self,X,y=None):
         XiT=np.expm1(X)-self.min_shift_
         self.logger.info(f'logp1_T inv transforming XiT nulls:{np.isnan(XiT).sum()}')
+        try:infinites=XiT.size-np.isfinite(XiT).sum()
+        except:self.logger.exception(f'type(XiT):{type(XiT)}')
+        self.logger.info(f'logp1_T inv transforming XiT not finite count:{infinites}')
+        XiT[~np.isfinite(XiT)]=10**50
         return XiT
     
 class logminus_T(BaseEstimator,TransformerMixin):
