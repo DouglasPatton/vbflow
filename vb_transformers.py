@@ -7,13 +7,14 @@ from sklearn.linear_model import ElasticNet, LinearRegression, Lars
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import OneHotEncoder,FunctionTransformer
+from sklearn.pipeline import make_pipeline,FeatureUnion
 from sklearn.impute import SimpleImputer,KNNImputer
 
 
-class stackNonLinearTransforms(BaseEstimator,TransformerMixin):
-    def __init__(self,):
+
+                
+                
                 
 
 class dropConst(BaseEstimator,TransformerMixin):

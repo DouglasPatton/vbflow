@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from vb_helper import myLogger,VBHelper
 from vb_transformers import shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,none_T, logp1_T,dropConst
 from missing_val_transformer import missingValHandler
+from nonlinear_stacker import stackNonLinearTransforms
 import os
 import pandas as pd
 
@@ -47,8 +48,8 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
         transformer_list=[none_T(),logp1_T()]
         steps=[
             ('prep',missingValHandler()),
+            ('nonlin_stacker',stackNonLinearTransforms()),
             ('scaler',StandardScaler()),
-            #('nonlin_stacker',stackNonLinearTransforms()),
             ('shrink_k1',shrinkBigKTransformer()), # retain a subset of the best original variables
             ('polyfeat',PolynomialFeatures(interaction_only=0)), # create interactions among them
 
