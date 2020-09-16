@@ -7,8 +7,9 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline,FeatureUnion
 from sklearn.impute import SimpleImputer,KNNImputer
+
 
 from vb_transformers import none_T#,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
 from vb_helper import myLogger

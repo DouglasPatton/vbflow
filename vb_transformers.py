@@ -12,10 +12,9 @@ from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 
 
-class stackNonLinearTransforms():
+class stackNonLinearTransforms(BaseEstimator,TransformerMixin):
     def __init__(self,):
-        assert False, 'not developed'
-            
+                
 
 class dropConst(BaseEstimator,TransformerMixin):
     def __init__(self):
