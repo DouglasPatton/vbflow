@@ -10,18 +10,18 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 
-from vb_helper import none_T#,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
+from vb_transformers import none_T#,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
+from vb_helper import myLogger
 
 
 
 
-
-class missingValHandler(BaseEstimator,TransformerMixin):
+class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
     # https://scikit-learn.org/stable/auto_examples/compose/plot_column_transformer_mixed_types.html#use-columntransformer-by-selecting-column-by-names
     def __init__(self,strategy='drop_row',transformer=None):
         self.strategy=strategy
         self.transformer=transformer
-        self.logger=logging.getLogger()
+        myLogger.__init__(self,name='missingValHandler.log')
     def fit(self,X,y):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
