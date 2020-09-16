@@ -71,7 +71,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
             'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,gridpoints+1)],
             'ttr__regressor__prep__strategy':['impute_middle','impute_knn_10']
         }
-        lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=-1)
+        lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv)
 
         return lin_reg_Xy_transform
 
