@@ -16,7 +16,7 @@ from vb_helper import myLogger
 
 
 class stackNonLinearTransforms(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,transform_list=[np.exp,logp1_T],select_best=1,score_func=f_regression):
+    def __init__(self,transform_list=[np.exp,logp1_T],select_best=0s,score_func=f_regression):
         myLogger.__init__(self,name='stackNonLinearTransforms.log')
         self.logger.info('starting stackNonLinearTransforms logger')
         self.transform_list=transform_list
@@ -52,13 +52,14 @@ class stackNonLinearTransforms(BaseEstimator,TransformerMixin,myLogger):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
         
-        X=self.T_.transform(X)
-    
+        X=self.T_.transform(X,y=y)
+        return X
     """def get_score_func(self,):
         if self.score_func=='f_regression':
             return f_regression
         elif self.score_func=='mutual_info_regression'
             return mutual_info_regression"""
+        
     
     def build_transformers(self,transform_list):
         transformer_tups=[]
