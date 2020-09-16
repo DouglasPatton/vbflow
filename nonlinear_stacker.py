@@ -11,41 +11,53 @@ from sklearn.preprocessing import OneHotEncoder,FunctionTransformer
 from sklearn.pipeline import make_pipeline,FeatureUnion
 from sklearn.impute import SimpleImputer,KNNImputer
 from vb_transformers import logp1_T
+from vb_helper import myLogger
 
-class stackNonLinearTransforms(BaseEstimator,TransformerMixin):
+
+class stackNonLinearTransforms(BaseEstimator,TransformerMixin,myLogger):
     def __init__(self,transform_list=[np.exp,logp1_T],select_best=1):
+        myLogger.__init__(self,name='stackNonLinearTransforms.log')
+        self.logger.info('starting stackNonLinearTransforms logger')
         self.transform_list=transform_list
-    def fit(self,X,y=None):
+        self.select_best=select_best
+    def fit(self,X,y):
+        try:
+            if type(X)!=pd.DataFrame:
+                X=pd.DataFrame(X)
+            self.X_dtypes_=dict(X.dtypes)
+            self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
+            self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
+            self.cat_list=[X.iloc[:,idx].unique() for idx in self.obj_idx_]
+
+            transform_tup_list=self.build_transformers(self.transform_list)
+            categorical_T=('no_transform',none_T(),self.obj_idx_)
+            if select_best:
+                numeric_T=('feature_union_transformer',make_pipeline([FeatureUnion(transform_tup_list),selectKbest(score_func=f_regression,k=self.select_best)]),self.float_idx_)
+            else:
+                numeric_T=('feature_union_transformer',FeatureUnion(transform_tup_list),self.float_idx_)
+
+
+            self.T_=ColumnTransformer(transformers=[numeric_T,categorical_T])
+            self.T_.fit(X,y)
+            return self
+        except:
+            self.logger.exception(f'')
+            assert False, 'halt'
+    def transform(self,X,y=None):
+        
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
-        self.X_dtypes_=dict(X.dtypes)
-        self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
-        self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
-        self.cat_list=[X.iloc[:,idx].unique() for idx in self.obj_idx_]
-        return self
-    def transform(self,X,y):
-        transform_tup_list=self.buildtransformers
-        if type(X)!=pd.DataFrame:
-            X=pd.DataFrame(X)
-        categorical_T=('no_transform',none_T(),self.obj_idx_)
-        if select_best:
-            numeric_T=('feature_union_transformer',make_pipeline([FeatureUnion(transform_tup_list),selectKbest(score_func=f_regression)]),self.float_idx_)
-        else:
-            numeric_T=('feature_union_transformer',FeatureUnion(transform_tup_list),self.float_idx_)
         
-        
-        T=ColumnTransformer(transformers=[numeric_T,categorical_T])
-        T.fit(X,y)
-        X=T.transform(X)
+        X=self.T_.transform(X)
         
     def build_transformers(self,transform_list):
         transformer_tups=[]
         for item in transform_list:
             if type(item) is np.ufunc:
-                transformer_tups.append((item.__name__,FunctionTransfomer(item)))
+                transformer_tups.append((item.__name__,FunctionTransformer(item)))
             if type(item) is str:
                 assert False, 'not developed'
             else:
-                tansformer_tups.append(item.__name__,item)
+                transformer_tups.append((item.__name__,item))
         return transformer_tups
                 
