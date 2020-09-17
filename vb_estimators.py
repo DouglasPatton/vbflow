@@ -25,7 +25,7 @@ except:
         
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=3):
+    def __init__(self,gridpoints=6):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
@@ -48,7 +48,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
         transformer_list=[none_T(),logp1_T()]
         steps=[
             ('prep',missingValHandler()),
-            ('nonlin_stacker',stackNonLinearTransforms()),
+            #('nonlin_stacker',stackNonLinearTransforms()),
             ('scaler',StandardScaler()),
             ('shrink_k1',shrinkBigKTransformer()), # retain a subset of the best original variables
             ('polyfeat',PolynomialFeatures(interaction_only=0)), # create interactions among them
@@ -59,7 +59,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
 
 
         X_T_pipe=Pipeline(steps=steps)
-        inner_cv=RepeatedKFold(n_splits=5, n_repeats=2, random_state=0)
+        inner_cv=RepeatedKFold(n_splits=10, n_repeats=2, random_state=0)
 
 
         Y_T_X_T_pipe=Pipeline(steps=[('ttr',TransformedTargetRegressor(regressor=X_T_pipe))])

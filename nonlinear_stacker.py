@@ -16,7 +16,7 @@ from vb_helper import myLogger
 
 
 class stackNonLinearTransforms(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,transform_list=[np.exp,logp1_T],select_best=0s,score_func=f_regression):
+    def __init__(self,transform_list=[np.exp,logp1_T],select_best=0,score_func=f_regression):
         myLogger.__init__(self,name='stackNonLinearTransforms.log')
         self.logger.info('starting stackNonLinearTransforms logger')
         self.transform_list=transform_list
