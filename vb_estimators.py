@@ -60,8 +60,8 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
 
 
         X_T_pipe=Pipeline(steps=steps)
-        inner_cv=regressor_stratified_cv(cv_splits=5,n_repeats=2,shuffle=True)
-        #RepeatedKFold(n_splits=10, n_repeats=2, random_state=0,shuffle=True)
+        #inner_cv=regressor_stratified_cv(cv_splits=5,n_repeats=2,shuffle=True)
+        inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
 
 
         Y_T_X_T_pipe=Pipeline(steps=[('ttr',TransformedTargetRegressor(regressor=X_T_pipe))])

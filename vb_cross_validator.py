@@ -1,6 +1,7 @@
-from mylogger import myLogger
-class regressor_stratified_cv(myLogger)
-    def __init__(self,cv_folds=10,cv_reps=2,,strategy='balanced',group_count=5,random_state=0,shuffle=True):
+from vb_helper import myLogger
+
+class regressor_stratified_cv(myLogger):
+    def __init__(self,cv_folds=10,cv_reps=2,strategy='balanced',group_count=5,random_state=0,shuffle=True):
         #self.cv_folds=cv_folds
         #self.cv_reps=cv_reps
         self.cat_reg=cat_reg
@@ -15,7 +16,7 @@ class regressor_stratified_cv(myLogger)
             self.cv=self.RepeatKFold(**cvkwargs)
             
     def split(X,y,groups=None):
-        if self.strategy='balanced':
+        if self.strategy=='balanced':
             ysort_idx=np.argsort(y)
             split=np.array_split(np.ones(y.shape))
             groupsplit=[i*split[i] for i in range(self.group_count)]
