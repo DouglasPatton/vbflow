@@ -26,7 +26,7 @@ except:
         
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=6,cv_strategy='q-balanced'):
+    def __init__(self,gridpoints=3,cv_strategy='q-balanced'):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
@@ -78,7 +78,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
             'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,gridpoints+1)],
             'ttr__regressor__prep__strategy':['impute_middle','impute_knn_10']
         }
-        lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=4)
+        lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=11)
 
         return lin_reg_Xy_transform
 

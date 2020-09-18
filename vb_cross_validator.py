@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
 
 class regressor_q_stratified_cv:
-    def __init__(self,n_splits=10,n_repeats=2,group_count=5,random_state=0):
+    def __init__(self,n_splits=10,n_repeats=2,group_count=10,random_state=0):
         self.group_count=group_count
         cvkwargs=dict(n_splits=n_splits,n_repeats=n_repeats,random_state=random_state)
         self.cv=RepeatedStratifiedKFold(**cvkwargs)
