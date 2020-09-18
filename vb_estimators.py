@@ -16,7 +16,7 @@ from missing_val_transformer import missingValHandler
 from nonlinear_stacker import stackNonLinearTransforms
 import os
 import pandas as pd
-from vb_cross_validator import regressor_stratified_cv
+from vb_cross_validator import regressor_q_stratified_cv
 
 try:
     import daal4py.sklearn
@@ -26,10 +26,11 @@ except:
         
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=6):
+    def __init__(self,gridpoints=6,cv_strategy='q-balanced'):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
         
     def fit(self,X,y):
         self.n_,self.k_=X.shape
@@ -60,8 +61,12 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
 
 
         X_T_pipe=Pipeline(steps=steps)
-        #inner_cv=regressor_stratified_cv(cv_splits=5,n_repeats=2,shuffle=True)
-        inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
+        #inner_cv=regressor_stratified_cv(n_splits=5,n_repeats=2,shuffle=True)
+        if self.cv_strategy=='q-balanced':
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=2,random_state=0)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
 
 
         Y_T_X_T_pipe=Pipeline(steps=[('ttr',TransformedTargetRegressor(regressor=X_T_pipe))])
