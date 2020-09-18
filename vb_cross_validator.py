@@ -7,17 +7,17 @@ class regressor_q_stratified_cv:
         cvkwargs=dict(n_splits=n_splits,n_repeats=n_repeats,random_state=random_state)
         self.cv=RepeatedStratifiedKFold(**cvkwargs)
             
-    def split(self,X,y):
+    def split(self,X,y,groups=None):
         split1=np.array_split(np.ones(y.shape),self.group_count)
         groupsplit=[i*split1[i] for i in range(self.group_count)]
         unsort_to_y=np.argsort(np.argsort(y)) # b/c groups is created as if y is sorted, this applies the
         #    "unsort ordering of y" to groups so groups matches the unsorted order of y
         #    i.e., if y_sorted==y[np.argsort(y)], then  y_sorted[np.argsort(np.argsort(y))]==y
-        groups=np.concatenate(groupsplit,axis=0)[unsort_to_y]
-        return self.cv.split(X,groups)
+        qgroups=np.concatenate(groupsplit,axis=0)[unsort_to_y]
+        return self.cv.split(X,qgroups,groups)
     
-    def get_n_splits(self,X,y):
-        return self.cv.get_n_splits(X,y)
+    def get_n_splits(self,X,y,groups=None):
+        return self.cv.get_n_splits(X,y,groups)
     
     
 if __name__=="__main__":
