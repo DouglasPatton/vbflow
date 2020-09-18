@@ -96,15 +96,15 @@ class logp1_T(BaseEstimator,TransformerMixin):
     def transform(self,X,y=None):
         X[X<-self.min_shift_]=-self.min_shift_ # added to avoid np.log(neg), really np.log(<1) b/c 0+1=1
         XT=np.log1p(X+self.min_shift_)
-        self.logger.info(f'logp1_T transforming XT nulls:{np.isnan(XT).sum()}')
+        #self.logger.info(f'logp1_T transforming XT nulls:{np.isnan(XT).sum()}')
         return  XT
         
     def inverse_transform(self,X,y=None):
         XiT=np.expm1(X)-self.min_shift_
-        self.logger.info(f'logp1_T inv transforming XiT nulls:{np.isnan(XiT).sum()}')
+        #self.logger.info(f'logp1_T inv transforming XiT nulls:{np.isnan(XiT).sum()}')
         try:infinites=XiT.size-np.isfinite(XiT).sum()
         except:self.logger.exception(f'type(XiT):{type(XiT)}')
-        self.logger.info(f'logp1_T inv transforming XiT not finite count:{infinites}')
+        #self.logger.info(f'logp1_T inv transforming XiT not finite count:{infinites}')
         XiT[~np.isfinite(XiT)]=10**50
         return XiT
     
