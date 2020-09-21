@@ -1,19 +1,18 @@
 import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.preprocessing import KBinsDiscretizer
 
 class regressor_q_stratified_cv:
-    def __init__(self,n_splits=10,n_repeats=2,group_count=10,random_state=0):
+    def __init__(self,n_splits=10,n_repeats=2,group_count=10,random_state=0,strategy='quantile'):
         self.group_count=group_count
-        cvkwargs=dict(n_splits=n_splits,n_repeats=n_repeats,random_state=random_state)
-        self.cv=RepeatedStratifiedKFold(**cvkwargs)
+        self.strategy=strategy
+        self.cvkwargs=dict(n_splits=n_splits,n_repeats=n_repeats,random_state=random_state)
+        self.cv=RepeatedStratifiedKFold(**self.cvkwargs)
+        self.discretizer=KBinsDiscretizer(n_bins=self.group_count,encode='ordinal',strategy=self.strategy)  
             
     def split(self,X,y,groups=None):
-        split1=np.array_split(np.ones(y.shape),self.group_count)
-        groupsplit=[i*split1[i] for i in range(self.group_count)]
-        y_srt_order=np.argsort(y)
-        qgroups=np.empty_like(y)
-        qgroups[y_srt_order]=np.concatenate(groupsplit,axis=0)
-        return self.cv.split(X,qgroups,groups)
+        kgroups=self.discretizer.fit_transform(y[:,None])[:,0]
+        return self.cv.split(X,kgroups,groups)
     
     def get_n_splits(self,X,y,groups=None):
         return self.cv.get_n_splits(X,y,groups)
@@ -23,7 +22,7 @@ if __name__=="__main__":
     n_splits=5
     n_repeats=5
     group_count=5
-    cv=regressor_q_stratified_cv(n_splits=n_splits,n_repeats=n_repeats,group_count=group_count,random_state=0)
+    cv=regressor_q_stratified_cv(n_splits=n_splits,n_repeats=n_repeats,group_count=group_count,random_state=0,strategy='uniform')
     import numpy as np
     n=1000000
     y=np.linspace(-n//2,n//2,n+1)
