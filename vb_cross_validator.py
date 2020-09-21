@@ -10,10 +10,9 @@ class regressor_q_stratified_cv:
     def split(self,X,y,groups=None):
         split1=np.array_split(np.ones(y.shape),self.group_count)
         groupsplit=[i*split1[i] for i in range(self.group_count)]
-        unsort_to_y=np.argsort(np.argsort(y)) # b/c groups is created as if y is sorted, this applies the
-        #    "unsort ordering of y" to groups so groups matches the unsorted order of y
-        #    i.e., if y_sorted==y[np.argsort(y)], then  y_sorted[np.argsort(np.argsort(y))]==y
-        qgroups=np.concatenate(groupsplit,axis=0)[unsort_to_y]
+        y_srt_order=np.argsort(y)
+        qgroups=np.empty_like(y)
+        qgroups[y_srt_order]=np.concatenate(groupsplit,axis=0)
         return self.cv.split(X,qgroups,groups)
     
     def get_n_splits(self,X,y,groups=None):
