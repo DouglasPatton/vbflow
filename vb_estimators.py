@@ -26,7 +26,7 @@ except:
         
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=3,cv_strategy='q-balanced',group_count=5):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
@@ -63,8 +63,8 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
 
         X_T_pipe=Pipeline(steps=steps)
         #inner_cv=regressor_stratified_cv(n_splits=5,n_repeats=2,shuffle=True)
-        if self.cv_strategy=='q-balanced':
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=2,random_state=0,group_count=self.group_count)
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=1, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
         
         else:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
@@ -75,9 +75,11 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
             'ttr__transformer':transformer_list,
             'ttr__regressor__polyfeat__degree':[2],
             'ttr__regressor__shrink_k2__selector__alpha':np.logspace(-2,2,gridpoints),
-            'ttr__regressor__shrink_k2__selector__l1_ratio':np.linspace(0,1,gridpoints),
-            'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,gridpoints+1,2)],
-            'ttr__regressor__prep__strategy':['impute_middle','impute_knn_10']
+            'ttr__regressor__shrink_k2__selector__l1_ratio':np.linspace(0.1,.9,gridpoints),
+            #'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,gridpoints+1,2)],
+            'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,11,4)],
+            #'ttr__regressor__prep__strategy':['impute_middle','impute_knn_10']
+            'ttr__regressor__prep__strategy':['impute_knn_10']
         }
         lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=11)
 
