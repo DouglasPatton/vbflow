@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
-from sklearn.linear_model import ElasticNet, LinearRegression, Lars, TweedieRegressor
+from sklearn.linear_model import ElasticNet, LinearRegression, Lars, TweedieRegressor,Lasso,LassoCV,LassoLarsCV
 from sklearn.svm import LinearSVR, SVR
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, PolynomialFeatures, OneHotEncoder, PowerTransformer
 from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
@@ -11,7 +11,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.compose import TransformedTargetRegressor
 import matplotlib.pyplot as plt
 from vb_helper import myLogger,VBHelper
-from vb_transformers import shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,none_T, logp1_T,dropConst
+from vb_transformers import shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,none_T,log_T, logp1_T,dropConst
 from missing_val_transformer import missingValHandler
 from nonlinear_stacker import stackNonLinearTransforms
 import os
@@ -47,42 +47,46 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
         return self.est_.predict(X)
     
     def get_estimator(self,):
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
         gridpoints=self.gridpoints
-        transformer_list=[none_T(),logp1_T()]
+        transformer_list=[none_T()]#,logp1_T()] # log_T()]#
         steps=[
-            ('prep',missingValHandler()),
+            ('prep',missingValHandler(strategy='impute_knn10')),
             #('nonlin_stacker',stackNonLinearTransforms()),
-            ('scaler',StandardScaler()),
-            ('shrink_k1',shrinkBigKTransformer()), # retain a subset of the best original variables
-            ('polyfeat',PolynomialFeatures(interaction_only=0)), # create interactions among them
+            #('scaler',StandardScaler()),
+            #('shrink_k1',shrinkBigKTransformer(selector=Lasso())), # retain a subset of the best original variables
+            ('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
+            ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
 
             ('drop_constant',dropConst()),
-            ('shrink_k2',shrinkBigKTransformer(selector=ElasticNet())), # pick from all of those options
-            ('reg',LinearRegression(fit_intercept=1))]
+            ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))), # pick from all of those options
+            ('reg',LinearRegression())]
 
 
         X_T_pipe=Pipeline(steps=steps)
         #inner_cv=regressor_stratified_cv(n_splits=5,n_repeats=2,shuffle=True)
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=1, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
         
-        else:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
 
 
         Y_T_X_T_pipe=Pipeline(steps=[('ttr',TransformedTargetRegressor(regressor=X_T_pipe))])
         Y_T__param_grid={
             'ttr__transformer':transformer_list,
             'ttr__regressor__polyfeat__degree':[2],
-            'ttr__regressor__shrink_k2__selector__alpha':np.logspace(-2,2,gridpoints),
-            'ttr__regressor__shrink_k2__selector__l1_ratio':np.linspace(0.1,.9,gridpoints),
+            #'ttr__regressor__shrink_k1__selector__alpha':np.logspace(-1.5,1.5,gridpoints),
+            #'ttr__regressor__shrink_k2__selector__alpha':list(np.logspace(-2,1.3,gridpoints*2)),
+            #'ttr__regressor__shrink_k2__selector__l1_ratio':list(np.linspace(0.05,.95,gridpoints)),
             #'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,gridpoints+1,2)],
-            'ttr__regressor__shrink_k1__max_k':[self.k_//gp for gp in range(1,11,4)],
+            #'ttr__regressor__shrink_k1__k_share':list(np.linspace(1/self.k_,1,gridpoints)),
             #'ttr__regressor__prep__strategy':['impute_middle','impute_knn_10']
-            'ttr__regressor__prep__strategy':['impute_knn_10']
+            'ttr__regressor__prep__strategy':['impute_middle','impute_knn_10']
         }
-        lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=11)
-
+        #lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=10,refit='neg_mean_squared_error')
+        #lin_reg_Xy_transform=GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv,n_jobs=4,refit='neg_mean_squared_error')
+        lin_reg_Xy_transform=X_T_pipe
         return lin_reg_Xy_transform
 
     

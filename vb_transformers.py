@@ -38,23 +38,31 @@ class dropConst(BaseEstimator,TransformerMixin):
         
                 
 class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
-    def __init__(self,max_k=500,selector=None):
+    def __init__(self,max_k=None,k_share=None,selector=None):
         self.logger=logging.getLogger()
         self.max_k=max_k
+        self.k_share=k_share
         self.selector=selector
             
         
     def fit(self,X,y):
         assert not y is None,f'y:{y}'
+        k=X.shape[1]
+        if self.max_k is None:
+            if self.k_share is None:
+                self.max_k=500
+            else:
+                self.max_k=int(k*self.k_share)
+                
         if self.selector is None:
             self.selector='Lars'
         if self.selector=='Lars':
             selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
         elif self.selector=='elastic-net':
-            selector=ElasticNet(fit_intercept=True,selection='random',tol=0.1,max_iter=500,warm_start=0)
+            selector=ElasticNet(fit_intercept=True,selection='random',tol=0.001,max_iter=5000,warm_start=1,random_state=0)
         else:
             selector=self.selector
-        k=X.shape[1]
+       
         selector.fit(X,y)
         self.col_select_=np.arange(k)[np.abs(selector.coef_)>0.0001]
         #print(f'self.col_select_:{self.col_select_}')
@@ -107,6 +115,19 @@ class logp1_T(BaseEstimator,TransformerMixin):
         #self.logger.info(f'logp1_T inv transforming XiT not finite count:{infinites}')
         XiT[~np.isfinite(XiT)]=10**50
         return XiT
+
+class log_T(BaseEstimator,TransformerMixin):
+    def __init__(self):
+        pass
+    def fit(self,X,y=None):
+        return self
+    def transform(self,X,y=None):
+        XT=np.zeros(X.shape)
+        XT[X>0]=np.log(X[X>0])
+        return XT
+    def inverse_transform(self,X,y=None):
+        return np.exp(X)
+    
     
 class logminus_T(BaseEstimator,TransformerMixin):
     def __init__(self):
