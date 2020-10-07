@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
-from sklearn.linear_model import ElasticNet, LinearRegression, Lars, TweedieRegressor,Lasso,LassoCV,LassoLarsCV
+from sklearn.linear_model import ElasticNet, LinearRegression, Lars, TweedieRegressor,Lasso,LassoCV,LassoLarsCV,ElasticNetCV
 from sklearn.svm import LinearSVR, SVR
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, PolynomialFeatures, OneHotEncoder, PowerTransformer
 from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
@@ -23,7 +23,175 @@ try:
     daal4py.sklearn.patch_sklearn()
 except:
     print('no daal4py')
+ 
+class L1Lars(BaseEstimator,TransformerMixin,myLogger):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+        myLogger.__init__(self,name='l1lars.log')
+        self.logger.info('starting l1lars logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
         
+    def fit(self,X,y):
+        self.n_,self.k_=X.shape
+        #self.logger(f'self.k_:{self.k_}')
+        self.est_=self.get_estimator()
+        self.est_.fit(X,y)
+        return self
+    def transform(self,X,y=None):
+        return self.est_.transform(X,y)
+    def score(self,X,y):
+        return self.est_.score(X,y)
+    def predict(self,X):
+        return self.est_.predict(X)
+    
+    def get_estimator(self,):
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+        #gridpoints=self.gridpoints
+        #param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints*2)}
+        steps=[
+            ('prep',missingValHandler(strategy='impute_knn10')),
+            ('reg',LassoLarsCV(cv=inner_cv))]
+        pipe=Pipeline(steps=steps)
+        
+        return pipe
+
+class ENet(BaseEstimator,TransformerMixin,myLogger):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+        myLogger.__init__(self,name='enet.log')
+        self.logger.info('starting enet logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
+        
+    def fit(self,X,y):
+        self.n_,self.k_=X.shape
+        #self.logger(f'self.k_:{self.k_}')
+        self.est_=self.get_estimator()
+        self.est_.fit(X,y)
+        return self
+    def transform(self,X,y=None):
+        return self.est_.transform(X,y)
+    def score(self,X,y):
+        return self.est_.score(X,y)
+    def predict(self,X):
+        return self.est_.predict(X)
+    
+    def get_estimator(self,):
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+        gridpoints=self.gridpoints
+        param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints)}
+        steps=[
+            ('prep',missingValHandler(strategy='impute_knn10')),
+            #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
+            #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
+            
+            #('drop_constant',dropConst()),
+            #('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
+            #('scaler',StandardScaler()),
+            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv),param_grid=param_grid))]
+            #('reg',ElasticNetCV(cv=inner_cv))]
+        pipe=Pipeline(steps=steps)
+        
+        return pipe
+
+class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+        myLogger.__init__(self,name='LinRegSupreme.log')
+        self.logger.info('starting LinRegSupreme logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
+        
+    def fit(self,X,y):
+        self.n_,self.k_=X.shape
+        #self.logger(f'self.k_:{self.k_}')
+        self.est_=self.get_estimator()
+        self.est_.fit(X,y)
+        return self
+    def transform(self,X,y=None):
+        return self.est_.transform(X,y)
+    def score(self,X,y):
+        return self.est_.score(X,y)
+    def predict(self,X):
+        return self.est_.predict(X)
+    
+    def get_estimator(self,):
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+        gridpoints=self.gridpoints
+        param_grid={'C':np.logspace(-2,4,gridpoints),
+                   'gamma':np.logspace(-2,0.5,gridpoints)}
+        steps=[
+            ('prep',missingValHandler(strategy='impute_knn10')),
+            #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
+            #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
+            
+            #('drop_constant',dropConst()),
+            #('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
+            ('scaler',StandardScaler()),
+            ('reg',GridSearchCV(SVR(kernel='rbf',cache_size=10000,tol=1e-4,max_iter=5000),param_grid=param_grid))]
+        pipe=Pipeline(steps=steps)
+        
+        outerpipe=pipe
+        return outerpipe
+
+
+
+class LinSVR(BaseEstimator,TransformerMixin,myLogger):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+        myLogger.__init__(self,name='LinRegSupreme.log')
+        self.logger.info('starting LinRegSupreme logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
+        
+    def fit(self,X,y):
+        self.n_,self.k_=X.shape
+        #self.logger(f'self.k_:{self.k_}')
+        self.est_=self.get_estimator()
+        self.est_.fit(X,y)
+        return self
+    def transform(self,X,y=None):
+        return self.est_.transform(X,y)
+    def score(self,X,y):
+        return self.est_.score(X,y)
+    def predict(self,X):
+        return self.est_.predict(X)
+    
+    def get_estimator(self,):
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+        gridpoints=self.gridpoints
+        param_grid={'C':np.logspace(-2,4,gridpoints)}
+        steps=[
+            ('prep',missingValHandler(strategy='impute_knn10')),
+            #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
+            ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
+            
+            ('drop_constant',dropConst()),
+            ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
+            ('scaler',StandardScaler()),
+            ('reg',GridSearchCV(LinearSVR(random_state=0,tol=1e-4,max_iter=1000),param_grid=param_grid))]
+        pipe=Pipeline(steps=steps)
+        
+        outerpipe=pipe
+        return outerpipe
+
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
     def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
@@ -57,11 +225,11 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
         steps=[
             ('prep',missingValHandler(strategy='impute_knn10')),
             #('nonlin_stacker',stackNonLinearTransforms()),
-            #('scaler',StandardScaler()),
+            #,
             #('shrink_k1',shrinkBigKTransformer(selector=Lasso())), # retain a subset of the best original variables
             ('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
-
+            
             ('drop_constant',dropConst()),
             ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))), # pick from all of those options
             ('reg',LinearRegression())]
