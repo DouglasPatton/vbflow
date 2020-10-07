@@ -97,8 +97,8 @@ class ENet(BaseEstimator,TransformerMixin,myLogger):
             #('drop_constant',dropConst()),
             #('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
             #('scaler',StandardScaler()),
-            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv),param_grid=param_grid))]
-            #('reg',ElasticNetCV(cv=inner_cv))]
+            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=True),param_grid=param_grid))]
+            #('reg',ElasticNetCV(cv=inner_cv,normalize=True))]
         pipe=Pipeline(steps=steps)
         
         return pipe
