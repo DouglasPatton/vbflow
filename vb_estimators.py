@@ -11,7 +11,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.compose import TransformedTargetRegressor
 import matplotlib.pyplot as plt
 from vb_helper import myLogger,VBHelper
-from vb_transformers import shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,none_T,log_T, logp1_T,dropConst
+from vb_transformers import shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,none_T,log_T, logp1_T,dropConst,columnBestTransformer
 from missing_val_transformer import missingValHandler
 from nonlinear_stacker import stackNonLinearTransforms
 import os
@@ -25,12 +25,15 @@ except:
     print('no daal4py')
  
 class L1Lars(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
         self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
         
     def fit(self,X,y):
         self.n_,self.k_=X.shape
@@ -54,19 +57,24 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger):
         #gridpoints=self.gridpoints
         #param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints*2)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10')),
-            ('reg',LassoLarsCV(cv=inner_cv))]
+            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('reg',LassoLarsCV(cv=inner_cv,))]
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         return pipe
 
 class ENet(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='enet.log')
         self.logger.info('starting enet logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
         self.group_count=group_count
+        self.float_idx=float_idx
+        self.cat_idx=cat_idx
+        self.bestT=bestT
         
     def fit(self,X,y):
         self.n_,self.k_=X.shape
@@ -90,26 +98,32 @@ class ENet(BaseEstimator,TransformerMixin,myLogger):
         gridpoints=self.gridpoints
         param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10')),
+            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
             #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
-            #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
+            #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2d)), # create interactions among them
             
             #('drop_constant',dropConst()),
             #('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
-            #('scaler',StandardScaler()),
-            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=True),param_grid=param_grid))]
+            ('scaler',StandardScaler()),
+            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False),param_grid=param_grid))]
             #('reg',ElasticNetCV(cv=inner_cv,normalize=True))]
+            
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         return pipe
 
 class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
         self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
         
     def fit(self,X,y):
         self.n_,self.k_=X.shape
@@ -131,10 +145,10 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
         else:
             inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
         gridpoints=self.gridpoints
-        param_grid={'C':np.logspace(-2,4,gridpoints),
+        param_grid={'C':np.logspace(-2,2,gridpoints),
                    'gamma':np.logspace(-2,0.5,gridpoints)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10')),
+            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
             #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
             
@@ -142,6 +156,8 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
             #('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
             ('scaler',StandardScaler()),
             ('reg',GridSearchCV(SVR(kernel='rbf',cache_size=10000,tol=1e-4,max_iter=5000),param_grid=param_grid))]
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         outerpipe=pipe
@@ -150,12 +166,15 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
 
 
 class LinSVR(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
         self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
         
     def fit(self,X,y):
         self.n_,self.k_=X.shape
@@ -179,7 +198,7 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger):
         gridpoints=self.gridpoints
         param_grid={'C':np.logspace(-2,4,gridpoints)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10')),
+            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
             #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
             
@@ -187,6 +206,8 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger):
             ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
             ('scaler',StandardScaler()),
             ('reg',GridSearchCV(LinearSVR(random_state=0,tol=1e-4,max_iter=1000),param_grid=param_grid))]
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         outerpipe=pipe
@@ -194,12 +215,15 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger):
 
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
         self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
         
     def fit(self,X,y):
         self.n_,self.k_=X.shape
@@ -233,7 +257,8 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
             ('drop_constant',dropConst()),
             ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))), # pick from all of those options
             ('reg',LinearRegression())]
-
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
 
         X_T_pipe=Pipeline(steps=steps)
         #inner_cv=regressor_stratified_cv(n_splits=5,n_repeats=2,shuffle=True)

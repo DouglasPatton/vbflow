@@ -10,10 +10,58 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder,FunctionTransformer
 from sklearn.pipeline import make_pipeline,FeatureUnion
 from sklearn.impute import SimpleImputer,KNNImputer
+from sklearn.feature_selection import f_regression
 
 
-
-                
+class columnBestTransformer(BaseEstimator,TransformerMixin):
+    def __init__(self,float_k=None):
+        self.logger=logging.getLogger()
+        self.transform_funcs={
+            'abs_ln':lambda x:np.log(np.abs(x)+.0000001),
+            'exp':lambda x:np.exp(x/100),
+            'recip':lambda x:(x+.000000001)**-1,
+            'none':lambda x:x,
+            'exp_inv':lambda x:np.exp(x)**-1
+        }
+        self.float_k=float_k
+            
+            
+    def fit(self,X,y=None):
+        if not self.float_k is None:
+            Xn=X[:,:self.float_k]
+        else:
+            Xn=X
+        self.k_=Xn.shape[1]
+        #pvals=[f_regression(fn(X),y)[1][None,:] for fn in self.transform_funcs.values()]
+        pvals=[]
+        self.logger.info(f'Xn.shape:{Xn.shape},Xn:{Xn}')
+        for fn in self.transform_funcs.values():
+           
+            #self.logger.info(f'fn:{fn}')
+            
+            TXn=fn(Xn)
+            try:
+                F,p=f_regression(TXn,y)
+            except:
+                self.logger.exception(f'error doing f_regression')
+                p=np.array([10000.]*TXn.shape[1])
+            pvals.append(p[None,:])
+             
+        pval_stack=np.concatenate(pvals,axis=0) #each row is a transform
+        #self.logger.info(f'pval_stack:{pval_stack}')
+        bestTloc=np.argsort(pval_stack,axis=0)[0,:]
+        Ts=list(self.transform_funcs.keys())
+        self.bestTlist=[Ts[i] for i in bestTloc]
+        self.logger.info(f'bestTlist:{self.bestTlist},')
+        T_s=list(self.transform_funcs.keys())
+        self.best_T_=[T_s[loc] for loc in bestTloc]
+        return self
+    def transform(self,X):
+        for c,t in enumerate(self.best_T_):
+            X[:,c]=self.transform_funcs[t](X[:,c])
+        return X
+        
+        
                 
                 
 
@@ -33,6 +81,10 @@ class dropConst(BaseEstimator,TransformerMixin):
             return X.loc[:,self.unique_>1]
         else:
             return X[:,self.unique_>1]
+    def get_feature_name(self,input_features=None):
+        if input_features is None:
+            input_features=[f'var_{i}' for i in range(len(self.unique_))]
+        return [input_features[i] for i,count in enumerate(self.unique_) if count >1]
   
     
         
@@ -44,10 +96,15 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
         self.k_share=k_share
         self.selector=selector
             
-        
+    def get_feature_name(self,input_features=None):
+        if input_features is None:
+            input_features=[f'var_{i}' for i in range(len(self.k_))]
+        return [input_features[i] for i in self.col_select_]
+      
     def fit(self,X,y):
         assert not y is None,f'y:{y}'
         k=X.shape[1]
+        self.k_=k
         if self.max_k is None:
             if self.k_share is None:
                 self.max_k=500
@@ -155,8 +212,14 @@ class none_T(BaseEstimator,TransformerMixin):
     def __init__(self):
         pass
     def fit(self,X,y=None):
+        self.k_=X.shape[1]
         return self
     def transform(self,X):
         return X
     def inverse_transform(self,X):
         return X  
+    
+    def get_feature_name(self,input_features=None):
+        if input_features is None:
+            input_features=[f'var_{i}' for i in range(len(self.k_))]
+        return input_features
