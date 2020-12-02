@@ -8,8 +8,13 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
+
+#import sys
+#sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
+from vb_cross_validator import regressor_q_stratified_cv
 
 import logging,logging.handlers
 class myLogger:
@@ -42,6 +47,49 @@ class VBHelper:
         self.max_k=None
         self.estimator_dict=None
         self.logger=logging.getLogger()
+    
+    def setData(self,X_df,y_df):
+        self.X_df=X_df
+        self.y_df=y_df
+        self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
+        self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
+        print(self.cat_idx,self.cat_vars)
+
+    def train_test_split(self):
+        return train_test_split(
+            self.X_df, self.y_df, 
+            test_size=self.test_share,random_state=self.rs)
+    
+    
+    
+    
+        
+    def runCrossValidate(self,n_jobs=4):
+        cv_results={}
+        for estimator_name,model in self.model_dict.items():
+            start=time()
+            model_i=cross_validate(
+                model, self.X_df, self.y_df, return_estimator=True, 
+                scoring=scorer_list, cv=self.cv, n_jobs=n_jobs)
+            end=time()
+            print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in scorer_list]}, runtime:{(end-start)/60} min.")
+            cv_results[estimator_name]=model_i
+        self.cv_results=cv_results
+        
+    def setCV(self,group_count=5,strategy='quantile'):
+        if strategy is None:
+            self.cv= RepeatedKFold(
+                n_splits=self.cv_folds, n_repeats=self.cv_reps, random_state=self.rs)
+        else:
+            self.cv= regressor_q_stratified_cv(
+                n_splits=self.cv_folds, n_repeats=self.cv_reps, 
+                random_state=self.rs,group_count=group_count,strategy=strategy)
+
+    
+    def plotCVYhat(self,):
+        for est_name,model_i in self.cv_results.items():
+            pass#for 
+    
 
     
     def plotCVScores(self,cv_score_dict,sort=1):

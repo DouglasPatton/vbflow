@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold, cross_validate
 from sklearn.preprocessing import KBinsDiscretizer
 
 class regressor_q_stratified_cv:
@@ -21,6 +21,12 @@ class regressor_q_stratified_cv:
     
     def get_n_splits(self,X,y,groups=None):
         return self.cv.get_n_splits(X,y,groups)
+
+class CVPredict:
+    def predict_with_cross_validate(self,):
+        pass
+#class cross_validate_and_save():
+    
     
     
 if __name__=="__main__":
