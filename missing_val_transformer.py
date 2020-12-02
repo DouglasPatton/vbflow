@@ -11,7 +11,7 @@ from sklearn.pipeline import make_pipeline,FeatureUnion
 from sklearn.impute import SimpleImputer,KNNImputer
 
 
-from vb_transformers import none_T
+from vb_transformers import none_T,featureNameExtractor
 #,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
 from vb_helper import myLogger
 
@@ -54,9 +54,9 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         return self
     
     def get_feature_names(self,input_features=None):
-        obj_feat=[input_features[i]for i in self.obj_idx_]
-        float_feat=[input_features[i]for i in self.float_idx_]
-        return self.T.get_feature_name([*float_feat,*obj_feat]) # order matters
+        #obj_feat=[input_features[i]for i in self.obj_idx_]
+        #float_feat=[input_features[i]for i in self.float_idx_]
+        return featureNameExtractor(self.T,input_features=input_features)
     
     def transform(self,X,y=None):
         if type(X)!=pd.DataFrame:
@@ -106,3 +106,6 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             self.logger.info(f'x_nan_count is non-zero! x_nan_count:{x_nan_count}')
         #print(X)
         return X
+    
+    
+    

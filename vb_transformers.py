@@ -8,9 +8,84 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder,FunctionTransformer
-from sklearn.pipeline import make_pipeline,FeatureUnion
+from sklearn.pipeline import make_pipeline,FeatureUnion,Pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 from sklearn.feature_selection import f_regression
+
+
+
+class featureNameExtractor:
+
+    """
+    based on https://johaupt.github.io/scikit-learn/tutorial/python/data%20processing/ml%20pipeline/model%20interpretation/columnTransformer_feature_names.html
+    Get feature names from all transformers.
+    Returns
+    -------
+    feature_names : list of strings
+        Names of the features produced by transform.
+    """
+
+    def __init__(self,column_transformer,input_features=None):
+        self.column_transformer=column_transformer
+        self.input_features=input_features
+        self.feature_names=[]
+
+    def run():
+
+        # Allow transformers to be pipelines. Pipeline steps are named differently, so preprocessing is needed
+        if type(self.column_transformer) == Pipeline:
+            l_transformers = [(name, trans, None, None) for step, name, trans in self.column_transformer._iter()]
+        else:
+            # For column transformers, follow the original method
+            l_transformers = list(self.column_transformer._iter(fitted=True))
+
+
+        for name, trans, column, _ in l_transformers: 
+            if type(trans) == Pipeline:
+                # Recursive call on pipeline
+                _names = featureNameExtractor(trans,input_features=self.input_features).run()
+                # if pipeline has no transformer that returns names
+                if len(_names)==0:
+                    _names = [name + "__" + f for f in column]
+                self.feature_names.extend(_names)
+            else:
+                self.feature_names.extend(get_names(trans))
+
+        return self.feature_names
+        
+    def get_names(trans):
+        # >> Original get_feature_names() method
+        if trans == 'drop' or (
+                hasattr(column, '__len__') and not len(column)):
+            return []
+        if trans == 'passthrough':
+            if hasattr(column_transformer, '_df_columns'):
+                if ((not isinstance(column, slice))
+                        and all(isinstance(col, str) for col in column)):
+                    return column
+                else:
+                    return column_transformer._df_columns[column]
+            else:
+                indices = np.arange(column_transformer._n_features)
+                return ['x%d' % i for i in indices[column]]
+        if not hasattr(trans, 'get_feature_names'):
+        # >>> Change: Return input column names if no method avaiable
+            # Turn error into a warning
+            warnings.warn("Transformer %s (type %s) does not "
+                                 "provide get_feature_names. "
+                                 "Will return input column names if available"
+                                 % (str(name), type(trans).__name__))
+            # For transformers without a get_features_names method, use the input
+            # names to the column transformer
+            if column is None:
+                return []
+            else:
+                return [name + "__" + f for f in column]
+
+        return [name + "__" + f for f in trans.get_feature_names()]
+    
+    ### Start of processing
+    
 
 
 class columnBestTransformer(BaseEstimator,TransformerMixin):
