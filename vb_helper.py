@@ -84,14 +84,14 @@ class VBHelper:
             return RepeatedKFold(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, random_state=self.rs)
         else:
-            if self.groupcount=None:
+            if self.groupcount is None:
                 self.groupcount=5
             return regressor_q_stratified_cv(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, 
-                random_state=self.rs,group_count=self.cv_group_count,strategy=self.cv_strategy)
+                random_state=self.rs,groupcount=self.cv_groupcount,strategy=self.cv_strategy)
 
     def predictCVYhat(self,):
-        for 
+        pass#for 
         
         
     def plotCVYhat(self,):
