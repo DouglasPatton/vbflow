@@ -2,12 +2,13 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
-from sklearn.linear_model import ElasticNet, LinearRegression, Lars, TweedieRegressor,Lasso,LassoCV,LassoLarsCV,ElasticNetCV
+from sklearn.experimental import enable_hist_gradient_boosting  
+from sklearn.ensemble import GradientBoostingRegressor,HistGradientBoostingRegressor
+from sklearn.linear_model import ElasticNet, LinearRegression, Lars,Lasso,LassoCV,LassoLarsCV,ElasticNetCV
 from sklearn.svm import LinearSVR, SVR
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, PolynomialFeatures, OneHotEncoder, PowerTransformer
 from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.compose import TransformedTargetRegressor
 import matplotlib.pyplot as plt
 from vb_helper import myLogger,VBHelper
@@ -24,17 +25,9 @@ try:
 except:
     print('no daal4py')
  
-class L1Lars(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
-        myLogger.__init__(self,name='l1lars.log')
-        self.logger.info('starting l1lars logger')
-        self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
-        self.group_count=group_count
-        self.bestT=bestT
-        self.cat_idx=cat_idx
-        self.float_idx=float_idx
-        
+class BaseHelper:
+    def __init__(self):
+        pass
     def fit(self,X,y):
         self.n_,self.k_=X.shape
         #self.logger(f'self.k_:{self.k_}')
@@ -47,6 +40,32 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger):
         return self.est_.score(X,y)
     def predict(self,X):
         return self.est_.predict(X)
+    
+
+class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+        myLogger.__init__(self,name='l1lars.log')
+        self.logger.info('starting l1lars logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
+        BaseHelper.__init__(self)
+        
+    """ def fit(self,X,y):
+        self.n_,self.k_=X.shape
+        #self.logger(f'self.k_:{self.k_}')
+        self.est_=self.get_estimator()
+        self.est_.fit(X,y)
+        return self
+    def transform(self,X,y=None):
+        return self.est_.transform(X,y)
+    def score(self,X,y):
+        return self.est_.score(X,y)
+    def predict(self,X):
+        return self.est_.predict(X)"""
     
     def get_estimator(self,):
         if self.cv_strategy:
@@ -64,8 +83,45 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger):
         pipe=Pipeline(steps=steps)
         
         return pipe
+    
+class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+        myLogger.__init__(self,name='gbr.log')
+        self.logger.info('starting gradient_boosting_reg logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
+        BaseHelper.__init__(self)
+    def get_estimator(self):
+        steps=[
+            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('reg',GradientBoostingRegressor())
+        ]
+        return Pipeline(steps=steps)
+        
+class HGBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+        myLogger.__init__(self,name='HGBR.log')
+        self.logger.info('starting histogram_gradient_boosting_reg logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.group_count=group_count
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
+        BaseHelper.__init__(self)
+    def get_estimator(self):
+        steps=[
+            ('prep',missingValHandler(strategy='pass-through',cat_idx=self.cat_idx)),
+            ('reg',HistGradientBoostingRegressor())
+        ]
+        return Pipeline(steps=steps)
 
-class ENet(BaseEstimator,TransformerMixin,myLogger):
+
+class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='enet.log')
         self.logger.info('starting enet logger')
@@ -75,20 +131,8 @@ class ENet(BaseEstimator,TransformerMixin,myLogger):
         self.float_idx=float_idx
         self.cat_idx=cat_idx
         self.bestT=bestT
-        
-    def fit(self,X,y):
-        self.n_,self.k_=X.shape
-        #self.logger(f'self.k_:{self.k_}')
-        self.est_=self.get_estimator()
-        self.est_.fit(X,y)
-        return self
-    def transform(self,X,y=None):
-        return self.est_.transform(X,y)
-    def score(self,X,y):
-        return self.est_.score(X,y)
-    def predict(self,X):
-        return self.est_.predict(X)
-    
+        BaseHelper.__init__(self)
+
     def get_estimator(self,):
         if self.cv_strategy:
             inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
@@ -114,7 +158,7 @@ class ENet(BaseEstimator,TransformerMixin,myLogger):
         
         return pipe
 
-class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
+class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
@@ -124,8 +168,9 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        BaseHelper.__init__(self)
         
-    def fit(self,X,y):
+    """def fit(self,X,y):
         self.n_,self.k_=X.shape
         #self.logger(f'self.k_:{self.k_}')
         self.est_=self.get_estimator()
@@ -136,7 +181,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
     def score(self,X,y):
         return self.est_.score(X,y)
     def predict(self,X):
-        return self.est_.predict(X)
+        return self.est_.predict(X)"""
     
     def get_estimator(self,):
         if self.cv_strategy:
@@ -165,7 +210,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger):
 
 
 
-class LinSVR(BaseEstimator,TransformerMixin,myLogger):
+class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
@@ -175,8 +220,9 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        BaseHelper.__init__(self)
         
-    def fit(self,X,y):
+    """def fit(self,X,y):
         self.n_,self.k_=X.shape
         #self.logger(f'self.k_:{self.k_}')
         self.est_=self.get_estimator()
@@ -187,7 +233,7 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger):
     def score(self,X,y):
         return self.est_.score(X,y)
     def predict(self,X):
-        return self.est_.predict(X)
+        return self.est_.predict(X)"""
     
     def get_estimator(self,):
         if self.cv_strategy:

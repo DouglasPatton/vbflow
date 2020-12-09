@@ -1,3 +1,4 @@
+from time import time
 import logging
 import os
 import matplotlib.pyplot as plt
@@ -70,9 +71,9 @@ class VBHelper:
             start=time()
             model_i=cross_validate(
                 model, self.X_df, self.y_df, return_estimator=True, 
-                scoring=scorer_list, cv=self.cv, n_jobs=n_jobs)
+                scoring=self.scorer_list, cv=self.cv, n_jobs=n_jobs)
             end=time()
-            print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in scorer_list]}, runtime:{(end-start)/60} min.")
+            print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
             cv_results[estimator_name]=model_i
         self.cv_results=cv_results
         
@@ -90,10 +91,29 @@ class VBHelper:
         for est_name,model_i in self.cv_results.items():
             pass#for 
     
-
+    def buildCVScoreDict(self):
+        cv_results=self.cv_results
+        scorer_list=self.scorer_list
+        cv_score_dict={}
+        cv_score_dict_means={}
+        for idx,(estimator_name,result) in enumerate(cv_results.items()):
+            #cv_estimators=result['estimator']
+            model_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
+            cv_score_dict[estimator_name]=model_idx_scoredict 
+            model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
+            cv_score_dict_means[estimator_name]=model_idx_mean_scores
+        self.cv_score_dict_means=cv_score_dict_means
+        self.cv_score_dict=cv_score_dict
+        
+    def viewCVScoreDict(self):
+        for scorer in self.scorer_list:
+            print(f'scores for scorer: {scorer}:')
+        for estimator_name in self.model_dict:
+            print(f'    {estimator_name}:{self.cv_score_dict_means[estimator_name][scorer]}')
     
-    def plotCVScores(self,cv_score_dict,sort=1):
-        colors = ['r', 'g', 'b', 'm', 'c', 'y', 'k']    
+    def plotCVScores(self,sort=1):
+        cv_score_dict=self.cv_score_dict
+        colors = plt.get_cmap('tab20')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,15])
         plt.suptitle(f"Model Scores Across {self.cv_count} Cross Validation Runs. ")
         s_count=len(self.scorer_list)
