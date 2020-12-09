@@ -1,4 +1,4 @@
-from time import time
+dsfrom time import time
 import logging
 import os
 import matplotlib.pyplot as plt
@@ -36,12 +36,14 @@ class myLogger:
         self.logger = logging.getLogger(handlername)
         
 class VBHelper:
-    def __init__(self,test_share,cv_folds,cv_reps,cv_count,rs):
+    def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_groupcount=None,cv_strategy=None):
         self.test_share=test_share
         self.cv_folds=cv_folds
         self.cv_reps=cv_reps
-        self.cv_count=cv_count
-        self.rs=rs
+        self.cv_count=cv_reps*cv_folds
+        self.cv_strategy=cv_strategy
+        self.cv_groupcount=cv_groupcount
+        self.rs=random_state
         
         # below are added in the notebook
         self.scorer_list=None
@@ -71,22 +73,27 @@ class VBHelper:
             start=time()
             model_i=cross_validate(
                 model, self.X_df, self.y_df, return_estimator=True, 
-                scoring=self.scorer_list, cv=self.cv, n_jobs=n_jobs)
+                scoring=self.scorer_list, cv=self.cv(), n_jobs=n_jobs)
             end=time()
             print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
             cv_results[estimator_name]=model_i
         self.cv_results=cv_results
         
-    def setCV(self,group_count=5,strategy='quantile'):
-        if strategy is None:
-            self.cv= RepeatedKFold(
+    def cv(self,):
+        if self.cv_strategy is None:
+            return RepeatedKFold(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, random_state=self.rs)
         else:
-            self.cv= regressor_q_stratified_cv(
+            if self.groupcount=None:
+                self.groupcount=5
+            return regressor_q_stratified_cv(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, 
-                random_state=self.rs,group_count=group_count,strategy=strategy)
+                random_state=self.rs,group_count=self.cv_group_count,strategy=self.cv_strategy)
 
-    
+    def predictCVYhat(self,):
+        for 
+        
+        
     def plotCVYhat(self,):
         for est_name,model_i in self.cv_results.items():
             pass#for 
