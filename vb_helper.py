@@ -84,8 +84,8 @@ class VBHelper:
             return RepeatedKFold(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, random_state=self.rs)
         else:
-            if self.groupcount is None:
-                self.groupcount=5
+            if self.cv_groupcount is None:
+                self.cv_groupcount=5
             return regressor_q_stratified_cv(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, 
                 random_state=self.rs,groupcount=self.cv_groupcount,strategy=self.cv_strategy)
