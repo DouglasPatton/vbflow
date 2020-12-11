@@ -43,12 +43,12 @@ class BaseHelper:
     
 
 class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -69,7 +69,7 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
             inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
@@ -85,12 +85,12 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return pipe
     
 class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -103,12 +103,12 @@ class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return Pipeline(steps=steps)
         
 class HGBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='HGBR.log')
         self.logger.info('starting histogram_gradient_boosting_reg logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -122,12 +122,12 @@ class HGBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
 
 class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,float_idx=None,cat_idx=None,bestT=False):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='enet.log')
         self.logger.info('starting enet logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.float_idx=float_idx
         self.cat_idx=cat_idx
         self.bestT=bestT
@@ -135,7 +135,7 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
             inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
@@ -159,12 +159,12 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return pipe
 
 class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,float_idx=None,cat_idx=None,bestT=False):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -185,7 +185,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
             inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
@@ -211,12 +211,12 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
 
 class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -237,7 +237,7 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
             inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
@@ -261,12 +261,12 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
         
 class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',group_count=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
-        self.group_count=group_count
+        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -286,7 +286,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,group_count=self.group_count)
+            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
             inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
