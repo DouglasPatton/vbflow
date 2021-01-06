@@ -73,13 +73,13 @@ class VBHelper:
             start=time()
             model_i=cross_validate(
                 model, self.X_df, self.y_df, return_estimator=True, 
-                scoring=self.scorer_list, cv=self.cv(), n_jobs=n_jobs)
+                scoring=self.scorer_list, cv=self.getCV(), n_jobs=n_jobs)
             end=time()
             print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
             cv_results[estimator_name]=model_i
         self.cv_results=cv_results
         
-    def cv(self,):
+    def getCV(self,):
         if self.cv_strategy is None:
             return RepeatedKFold(
                 n_splits=self.cv_folds, n_repeats=self.cv_reps, random_state=self.rs)
@@ -91,12 +91,60 @@ class VBHelper:
                 random_state=self.rs,groupcount=self.cv_groupcount,strategy=self.cv_strategy)
 
     def predictCVYhat(self,):
-        pass#for 
+        train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df)))
+        n,k=self.X_df.shape
+        data_idx=np.arange(n)
+        yhat_dict={}
+        for idx,(estimator_name,result) in enumerate(self.cv_results.items()):
+            yhat_dict[estimator_name]=[]
+            for r in range(self.cv_reps):
+                yhat=np.empty([n,])
+                for s in range(self.cv_folds): # s for split
+                    m=r*self.cv_folds+s
+                    cv_est=result['estimator'][m]
+                    test_rows=test_idx_list[m]
+                    yhat[test_rows]=cv_est.predict(self.X_df.iloc[test_rows])
+                yhat_dict[estimator_name].append(yhat)
+        self.cv_yhat_dict=yhat_dict
+        
+    def plotCVYhat(self,single_plot=True):
+        colors = plt.get_cmap('tab10')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
+        fig=plt.figure(figsize=[12,15])
+        plt.suptitle(f"Y and CV-test Yhat Across {self.cv_count} Cross Validation Runs. ")
+        
+        #ax.set_xlabel('estimator')
+        #ax.set_ylabel(scorer)
+        #ax.set_title(scorer)
+        
+        y=self.y_df
+        n=y.shape[0]
+        y_sort_idx=np.argsort(y)
+        
+        xidx_stack=np.concatenate([np.arange(n) for _ in range(self.cv_reps)],axis=0)
+        est_count=len(self.cv_yhat_dict)
+        if single_plot:
+            ax=fig.add_subplot(111)
+            ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.9,label='y')
+        for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
+            if not single_plot:
+                ax=fig.add_subplot(est_count,1,e+1)
+                ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.7,label='y')
+            yhat_stack=np.concatenate(yhat_list,axis=0)
+            ax.scatter(xidx_stack,yhat_stack,color=colors[e],alpha=0.4,marker='_',s=7,label=f'yhat_{est_name}')
+            #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=estimator_name+' cv score='+str(np.mean(cv_score_dict[estimator_name][scorer])))
+            ax.grid(True)
+        #ax.xaxis.set_ticks([])
+        #ax.xaxis.set_visible(False)
+            ax.legend(loc=2)
         
         
-    def plotCVYhat(self,):
-        for est_name,model_i in self.cv_results.items():
-            pass#for 
+        
+        
+        
+        
+        
+        
+            
     
     def buildCVScoreDict(self):
         cv_results=self.cv_results

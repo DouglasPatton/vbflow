@@ -43,7 +43,7 @@ class BaseHelper:
     
 
 class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.gridpoints=gridpoints
@@ -52,6 +52,7 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        self.impute_strategy=impute_strategy
         BaseHelper.__init__(self)
         
     """ def fit(self,X,y):
@@ -76,7 +77,7 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         #gridpoints=self.gridpoints
         #param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints*2)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             ('reg',LassoLarsCV(cv=inner_cv,))]
         if self.bestT:
             steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
@@ -85,7 +86,7 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return pipe
     
 class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
         self.gridpoints=gridpoints
@@ -94,10 +95,11 @@ class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        self.impute_strategy=impute_strategy
         BaseHelper.__init__(self)
     def get_estimator(self):
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             ('reg',GradientBoostingRegressor())
         ]
         return Pipeline(steps=steps)
@@ -122,7 +124,7 @@ class HGBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
 
 class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,float_idx=None,cat_idx=None,bestT=False):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='enet.log')
         self.logger.info('starting enet logger')
         self.gridpoints=gridpoints
@@ -131,6 +133,7 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         self.float_idx=float_idx
         self.cat_idx=cat_idx
         self.bestT=bestT
+        self.impute_strategy=impute_strategy
         BaseHelper.__init__(self)
 
     def get_estimator(self,):
@@ -142,7 +145,7 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         gridpoints=self.gridpoints
         param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2d)), # create interactions among them
             
@@ -159,7 +162,7 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return pipe
 
 class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,float_idx=None,cat_idx=None,bestT=False):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
@@ -168,6 +171,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        self.impute_strategy=impute_strategy
         BaseHelper.__init__(self)
         
     """def fit(self,X,y):
@@ -193,7 +197,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         param_grid={'C':np.logspace(-2,2,gridpoints),
                    'gamma':np.logspace(-2,0.5,gridpoints)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             #('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
             
@@ -211,7 +215,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
 
 class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
@@ -220,6 +224,7 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        self.impute_strategy=impute_strategy
         BaseHelper.__init__(self)
         
     """def fit(self,X,y):
@@ -244,7 +249,7 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         gridpoints=self.gridpoints
         param_grid={'C':np.logspace(-2,4,gridpoints)}
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10',cat_idx=self.cat_idx)),
+            ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
             
@@ -260,8 +265,8 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return outerpipe
 
         
-class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
+class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.gridpoints=gridpoints
@@ -270,19 +275,9 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        
-    def fit(self,X,y):
-        self.n_,self.k_=X.shape
-        #self.logger(f'self.k_:{self.k_}')
-        self.est_=self.get_estimator()
-        self.est_.fit(X,y)
-        return self
-    def transform(self,X,y=None):
-        return self.est_.transform(X,y)
-    def score(self,X,y):
-        return self.est_.score(X,y)
-    def predict(self,X):
-        return self.est_.predict(X)
+        self.impute_strategy=impute_strategy
+        BaseHelper.__init__(self)
+    
     
     def get_estimator(self,):
         if self.cv_strategy:
@@ -293,7 +288,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger):
         gridpoints=self.gridpoints
         transformer_list=[none_T()]#,logp1_T()] # log_T()]#
         steps=[
-            ('prep',missingValHandler(strategy='impute_knn10')),
+            ('prep',missingValHandler(strategy=self.impute_strategy)),
             #('nonlin_stacker',stackNonLinearTransforms()),
             #,
             #('shrink_k1',shrinkBigKTransformer(selector=Lasso())), # retain a subset of the best original variables
