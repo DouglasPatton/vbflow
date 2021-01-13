@@ -1,5 +1,6 @@
 import numpy as np
-from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.optimize import least_squares
+from sklearn.base import BaseEstimator, TransformerMixin,RegressorMixin
 from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
 from sklearn.experimental import enable_hist_gradient_boosting  
@@ -40,8 +41,122 @@ class BaseHelper:
         return self.est_.score(X,y)
     def predict(self,X):
         return self.est_.predict(X)
-    
+  
 
+'''class RegularizedFlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
+    def __init__(self,model_kwargs={'form':'exp(XB)','regularize':'l1'}):
+        self.model_kwargs=model_kwargs
+        
+    def expXB(self,B,X):
+        Bconst=B[0]
+        Betas=B[1:]
+        return np.exp(Bconst+(X*Betas).sum(axis=1))
+    
+    def est_residuals(self,B,X,y):
+        if regularize in self.model_kwargs:
+            res=self.est_(B,X)-y
+            sgn=np.ones_like(res)
+            sgn[res<0]=-1
+            #if self.model_kwargs['regularize']=='l1':
+            #    res+=B.sum()*
+            return 
+        else:
+            return self.est_(B,X)-y
+    
+    def fit(self,X,y):
+        if self.model_kwargs['form']=='exp(XB)':
+            self.est_=self.expXB
+        #https://scipy-cookbook.readthedocs.io/items/robust_regression.html
+        self.fit_est_=least_squares(self.est_residuals, np.ones(X.shape[1]),args=(X, y))# loss='soft_l1', f_scale=0.1, )
+        return self
+    
+    """def score(self,X,y):
+        #negative mse
+        return mean_squared_error(self.predict(X),y)"""
+    
+    def predict(self,X):
+        return self.est_(self.fit_est_.x,X)
+'''
+
+
+
+class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
+    def __init__(self,model_kwargs={'form':'expXB'}):
+        self.model_kwargs=model_kwargs
+     
+    def powXB(self,B,X):
+        Bconst=B[1]
+        Bexponent=B[0]
+        Betas=B[2:]
+        y=(Bconst+(X@Betas))**(Bexponent**0.5) # **0.5 to control
+        return np.nan_to_num(y,nan=1e298)
+    
+    def expXB(self,B,X):
+        Bconst=B[0]
+        Betas=B[1:]
+        return np.exp(Bconst+(X@Betas))
+    
+    def est_residuals(self,B,X,y):
+        return self.est_(B,X)-y
+    
+    def fit(self,X,y):
+        if self.model_kwargs['form']=='expXB':
+            self.est_=self.expXB
+            self.k=X.shape[1]+1
+        elif self.model_kwargs['form']=='powXB':
+            self.est_=self.powXB
+            self.k=X.shape[1]+2
+        #https://scipy-cookbook.readthedocs.io/items/robust_regression.html
+        self.fit_est_=least_squares(self.est_residuals, np.ones(self.k),args=(X, y))# loss='soft_l1', f_scale=0.1, )
+        return self
+    
+    """def score(self,X,y):
+        #negative mse
+        return mean_squared_error(self.predict(X),y)"""
+    
+    def predict(self,X):
+        B=self.fit_est_.x
+        return self.est_(B,X)
+        
+    
+            
+        
+
+class FlexiblePipe(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
+    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None,model_kwargs={}):
+        myLogger.__init__(self,name='l1lars.log')
+        self.logger.info('starting l1lars logger')
+        self.gridpoints=gridpoints
+        self.cv_strategy=cv_strategy
+        self.groupcount=groupcount
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
+        self.impute_strategy=impute_strategy
+        self.model_kwargs=model_kwargs
+        BaseHelper.__init__(self)
+        
+    def get_estimator(self,):
+        if self.cv_strategy:
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
+        
+        else:
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=5, random_state=0)
+        
+        steps=[
+            ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            ('scaler',StandardScaler()),
+            ('select',shrinkBigKTransformer(max_k=4)),
+            ('reg',FlexibleEstimator(model_kwargs=self.model_kwargs))
+        ]
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+        pipe=Pipeline(steps=steps)
+            
+        param_grid={'select__k_share':np.linspace(0.2,1,self.gridpoints*2)}
+        outerpipe=GridSearchCV(pipe,param_grid=param_grid)
+        return outerpipe
+    
 class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
@@ -70,10 +185,10 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
-            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=5, random_state=0)
         #gridpoints=self.gridpoints
         #param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints*2)}
         steps=[
@@ -86,12 +201,9 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         return pipe
     
 class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,impute_strategy='impute_knn5',bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
-        self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
-        self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -102,16 +214,14 @@ class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             ('reg',GradientBoostingRegressor())
         ]
+        if self.bestT:
+            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         return Pipeline(steps=steps)
         
 class HGBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='HGBR.log')
         self.logger.info('starting histogram_gradient_boosting_reg logger')
-        self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
-        self.groupcount=groupcount
-        self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         BaseHelper.__init__(self)
@@ -138,10 +248,10 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
 
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
-            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=5, random_state=0)
         gridpoints=self.gridpoints
         param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints)}
         steps=[
@@ -189,10 +299,10 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
-            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=5, random_state=0)
         gridpoints=self.gridpoints
         param_grid={'C':np.logspace(-2,2,gridpoints),
                    'gamma':np.logspace(-2,0.5,gridpoints)}
@@ -242,10 +352,10 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
-            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=5, random_state=0)
         gridpoints=self.gridpoints
         param_grid={'C':np.logspace(-2,4,gridpoints)}
         steps=[
@@ -281,12 +391,12 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
     
     def get_estimator(self,):
         if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=5,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
+            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=5, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
         
         else:
-            inner_cv=RepeatedKFold(n_splits=5, n_repeats=5, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=5, random_state=0)
         gridpoints=self.gridpoints
-        transformer_list=[none_T()]#,logp1_T()] # log_T()]#
+        transformer_list=[none_T(),log_T(),logp1_T()]#,logp1_T()] # log_T()]#
         steps=[
             ('prep',missingValHandler(strategy=self.impute_strategy)),
             #('nonlin_stacker',stackNonLinearTransforms()),
@@ -302,7 +412,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
 
         X_T_pipe=Pipeline(steps=steps)
-        #inner_cv=regressor_stratified_cv(n_splits=5,n_repeats=2,shuffle=True)
+        #inner_cv=regressor_stratified_cv(n_splits=10,n_repeats=2,shuffle=True)
         
 
 
