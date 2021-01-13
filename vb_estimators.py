@@ -43,9 +43,10 @@ class BaseHelper:
         return self.est_.predict(X)
   
 
-'''class RegularizedFlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
-    def __init__(self,model_kwargs={'form':'exp(XB)','regularize':'l1'}):
-        self.model_kwargs=model_kwargs
+'''
+class RegularizedFlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
+    def __init__(self,flex_kwargs={'form':'exp(XB)','regularize':'l1'}):
+        self.flex_kwargs=flex_kwargs
         
     def expXB(self,B,X):
         Bconst=B[0]
@@ -53,18 +54,18 @@ class BaseHelper:
         return np.exp(Bconst+(X*Betas).sum(axis=1))
     
     def est_residuals(self,B,X,y):
-        if regularize in self.model_kwargs:
+        if regularize in self.flex_kwargs:
             res=self.est_(B,X)-y
             sgn=np.ones_like(res)
             sgn[res<0]=-1
-            #if self.model_kwargs['regularize']=='l1':
+            #if self.flex_kwargs['regularize']=='l1':
             #    res+=B.sum()*
             return 
         else:
             return self.est_(B,X)-y
     
     def fit(self,X,y):
-        if self.model_kwargs['form']=='exp(XB)':
+        if self.flex_kwargs['form']=='exp(XB)':
             self.est_=self.expXB
         #https://scipy-cookbook.readthedocs.io/items/robust_regression.html
         self.fit_est_=least_squares(self.est_residuals, np.ones(X.shape[1]),args=(X, y))# loss='soft_l1', f_scale=0.1, )
@@ -81,33 +82,80 @@ class BaseHelper:
 
 
 class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
-    def __init__(self,model_kwargs={'form':'expXB'}):
-        self.model_kwargs=model_kwargs
-     
-    def powXB(self,B,X):
-        Bconst=B[1]
-        Bexponent=B[0]
-        Betas=B[2:]
-        y=(Bconst+(X@Betas))**(Bexponent**0.5) # **0.5 to control
-        return np.nan_to_num(y,nan=1e298)
+    def __init__(self,form='expXB',robust=False,shift=True,scale=True):
+        self.form=form
+        self.robust=robust
+        self.shift=shift
+        self.scale=scale
     
-    def expXB(self,B,X):
+    def linear(self,B,X):
         Bconst=B[0]
         Betas=B[1:]
-        return np.exp(Bconst+(X@Betas))
+        y=Bconst+(X@Betas)
+        return np.nan_to_num(y,nan=1e298)
+    
+    def powXB(self,B,X):
+        param_idx=0
+        if self.shift:
+            Bshift=B[param_idx]
+            param_idx+=1
+        else:
+            Bshift=0
+        if self.scale:
+            Bscale=B[param_idx]
+            param_idx+=1
+        else:
+            Bscale=1
+        Bexponent=B[param_idx]
+        param_idx+=1
+        Bconst=B[param_idx]
+        param_idx+=1
+        Betas=B[param_idx:]
+        
+        y=Bshift+Bscale*(Bconst+(X@Betas))**(int(Bexponent)) 
+        return np.nan_to_num(y,nan=1e290)
+    
+    def expXB(self,B,X):
+        param_idx=0
+        if self.shift:
+            Bshift=B[param_idx]
+            param_idx+=1
+        else:
+            Bshift=0
+        if self.scale:
+            Bscale=B[param_idx]
+            param_idx+=1
+        else:
+            Bscale=1
+        Bconst=B[param_idx]
+        param_idx+=1
+        Betas=B[param_idx:]
+        y=Bshift+Bscale*np.exp(Bconst+(X@Betas))
+        return np.nan_to_num(y,nan=1e298)
     
     def est_residuals(self,B,X,y):
         return self.est_(B,X)-y
     
     def fit(self,X,y):
-        if self.model_kwargs['form']=='expXB':
+        if self.form=='expXB':
             self.est_=self.expXB
-            self.k=X.shape[1]+1
-        elif self.model_kwargs['form']=='powXB':
+            self.k=X.shape[1]+1 # constant
+        elif self.form=='powXB':
             self.est_=self.powXB
-            self.k=X.shape[1]+2
+            self.k=X.shape[1]+2 # constant & exponent
+        elif self.form=='linear':
+            self.est=self.linear
+            self.k=X.shape[1]+1 # constant
+        if not self.form=='linear':
+            if self.scale:
+                self.k+=1
+            if self.shift:
+                self.k+=1
         #https://scipy-cookbook.readthedocs.io/items/robust_regression.html
-        self.fit_est_=least_squares(self.est_residuals, np.ones(self.k),args=(X, y))# loss='soft_l1', f_scale=0.1, )
+        if self.robust:
+            self.fit_est_=least_squares(self.est_residuals, np.ones(self.k),args=(X, y),loss='soft_l1', f_scale=10,)# 
+        else:
+            self.fit_est_=least_squares(self.est_residuals, np.ones(self.k),args=(X, y))# 
         return self
     
     """def score(self,X,y):
@@ -123,9 +171,16 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
         
 
 class FlexiblePipe(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
-    def __init__(self,impute_strategy='impute_knn5',gridpoints=4,cv_strategy='quantile',groupcount=5,bestT=False,cat_idx=None,float_idx=None,model_kwargs={}):
+    def __init__(
+        self,functional_form_search =False,
+        impute_strategy='impute_knn5',gridpoints=4,
+        cv_strategy='quantile',groupcount=5,bestT=False,
+        cat_idx=None,float_idx=None,flex_kwargs={}
+        ):
+        
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
+        self.functional_form_search=functional_form_search
         self.gridpoints=gridpoints
         self.cv_strategy=cv_strategy
         self.groupcount=groupcount
@@ -133,7 +188,7 @@ class FlexiblePipe(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.impute_strategy=impute_strategy
-        self.model_kwargs=model_kwargs
+        self.flex_kwargs=flex_kwargs
         BaseHelper.__init__(self)
         
     def get_estimator(self,):
@@ -147,13 +202,16 @@ class FlexiblePipe(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             ('scaler',StandardScaler()),
             ('select',shrinkBigKTransformer(max_k=4)),
-            ('reg',FlexibleEstimator(model_kwargs=self.model_kwargs))
+            ('reg',FlexibleEstimator(**self.flex_kwargs))
         ]
         if self.bestT:
             steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
-            
         param_grid={'select__k_share':np.linspace(0.2,1,self.gridpoints*2)}
+        if self.functional_form_search:
+            param_grid['reg__form']=['powXB','expXB','linear']
+            
+
         outerpipe=GridSearchCV(pipe,param_grid=param_grid)
         return outerpipe
     
