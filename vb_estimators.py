@@ -144,7 +144,7 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
             self.est_=self.powXB
             self.k=X.shape[1]+2 # constant & exponent
         elif self.form=='linear':
-            self.est=self.linear
+            self.est_=self.linear
             self.k=X.shape[1]+1 # constant
         if not self.form=='linear':
             if self.scale:
@@ -205,11 +205,11 @@ class FlexiblePipe(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('reg',FlexibleEstimator(**self.flex_kwargs))
         ]
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         param_grid={'select__k_share':np.linspace(0.2,1,self.gridpoints*2)}
         if self.functional_form_search:
-            param_grid['reg__form']=['powXB','expXB','linear']
+            param_grid['reg__form']=['powXB','expXB']#,'linear']
             
 
         outerpipe=GridSearchCV(pipe,param_grid=param_grid)
@@ -253,7 +253,7 @@ class L1Lars(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
             ('reg',LassoLarsCV(cv=inner_cv,))]
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         return pipe
@@ -273,7 +273,7 @@ class GBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('reg',GradientBoostingRegressor())
         ]
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         return Pipeline(steps=steps)
         
 class HGBR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
@@ -324,7 +324,7 @@ class ENet(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             #('reg',ElasticNetCV(cv=inner_cv,normalize=True))]
             
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         return pipe
@@ -374,7 +374,7 @@ class RBFSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('scaler',StandardScaler()),
             ('reg',GridSearchCV(SVR(kernel='rbf',cache_size=10000,tol=1e-4,max_iter=5000),param_grid=param_grid))]
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         outerpipe=pipe
@@ -426,7 +426,7 @@ class LinSVR(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('scaler',StandardScaler()),
             ('reg',GridSearchCV(LinearSVR(random_state=0,tol=1e-4,max_iter=1000),param_grid=param_grid))]
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         pipe=Pipeline(steps=steps)
         
         outerpipe=pipe
@@ -467,7 +467,7 @@ class LinRegSupreme(BaseEstimator,TransformerMixin,myLogger,BaseHelper):
             ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))), # pick from all of those options
             ('reg',LinearRegression())]
         if self.bestT:
-            steps=[steps[0],('select',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
+            steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
 
         X_T_pipe=Pipeline(steps=steps)
         #inner_cv=regressor_stratified_cv(n_splits=10,n_repeats=2,shuffle=True)
