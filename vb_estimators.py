@@ -498,12 +498,13 @@ class NullModel(BaseEstimator,RegressorMixin):
         return x
  
 class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,pipelist=[GBR],kwargs_list={},impute_strategy='impute_knn5',cat_idx=None):
+    def __init__(self,pipelist=[('gbr',GBR)],kwargs_list={},impute_strategy='impute_knn5',cat_idx=None):
         myLogger.__init__(self,name='multipipe.log')
         self.pipelist=pipelist
         self.kwargs_list=kwargs_list
         self.cat_idx=cat_idx
         self.impute_strategy=impute_strategy
+        BaseHelper.__init__(self)
         
     def get_pipe(self):
         try:
@@ -513,20 +514,80 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             #for kwargs in self.kwargs_list:
             #    kwargs['do_prep']=False
             est_pipes=[(p[0],p[1](**self.kwargs_list[i])) for i,p in enumerate(self.pipelist)]
+            final_e=None#NullModel()
             steps=[
                 ('prep',missingValHandler(
                     strategy=self.impute_strategy,cat_idx=self.cat_idx)),
-                ('post',StackingRegressor(est_pipes,passthrough=True,final_estimator=NullModel()))]   
+                ('post',StackingRegressor(est_pipes,passthrough=False,final_estimator=final_e,n_jobs=1))]   
             return Pipeline(steps=steps)
         except:
             self.logger.exception(f'error')
             assert False,'halt'
     
-    def get_names(self):
-        self.est
+    def get_pipe_names(self):
+        pipe_names=[pipe_tup[0] for pipe_tup in self.pipelist]
+        return pipe_names
     
-    #def extract_pipe
+    def get_individual_post_pipes(self,names=None):
+        if names is None:
+            names=self.get_pipe_names()
+        if type(names) is str:
+            names=[names]
+        pipe_dict={} 
+        for name in names:
+            pipe_dict[name]=self.pipe_['post'].named_estimators_[name]
+        return pipe_dict
+    
+    def get_prep(self):
+        return self.pipe_['prep']
+                
+    def build_individual_fitted_pipelines(self,names=None):
+        pipe_dict=self.get_individual_post_pipes(names=names)
+        prep=self.get_prep()
+        fitted_ipipe_dict={}#i for individual
+        for pname,pipe in pipe_dict.items():
+            fitted_steps=[('prep',prep),('post',pipe)]
+            #fitted_ipipe_dict[pname]=CompositePostFitPipe(fitted_steps)
+            fitted_ipipe_dict[pname]=FCombo(fitted_steps)
+        return fitted_ipipe_dict
         
+ 
+"""class CompositePostFitPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
+    def __init__(self,fitted_steps):
+        myLogger.__init__(self,name='CompositePostFitPipe.log')
+        self.fitted_steps=fitted_steps
+        BaseHelper.__init__(self,)
+        
+        
+    def get_dpipe(self):
+         FCombo(self.fitted_steps)"""
+    
+            
+class FCombo(BaseEstimator,RegressorMixin,myLogger):
+    #Frankenstein fitted combos
+    def __init__(self,fitted_steps):
+        myLogger.__init__(self)
+        self.fitted_steps=fitted_steps
+        
+        
+    def fit(self,X,y):
+        assert False,'fit called! this is a fitted combo!'
+        
+    #def transform(self,X,y=None):
+    #    return self.pipe_.transform(X,y)
+    #def score(self,X,y):
+    #    return .score(X,y)
+    
+    def predict(self,X):
+        step_n=len(self.fitted_steps)
+        step_names=[step_tup[0] for step_tup in self.fitted_steps]
+        Xt=X.copy()
+        for s in range(0,step_n-1):
+            Xt=self.fitted_steps[s][1].transform(Xt)
+        return self.fitted_steps[-1][1]d.predict(Xt)
+        
+        return yhat
+    
     
     
     
