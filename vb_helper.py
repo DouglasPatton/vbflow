@@ -12,6 +12,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
+from vb_estimators import MultiPipe,FCombo
 
 #import sys
 #sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
@@ -67,7 +68,7 @@ class VBHelper:
     
     
         
-    def runCrossValidate(self,n_jobs=4):
+    def runCrossValidate(self,n_jobs=4,expand_multipipes=True):
         cv_results={}
         for estimator_name,model in self.model_dict.items():
             start=time()
@@ -77,6 +78,20 @@ class VBHelper:
             end=time()
             print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
             cv_results[estimator_name]=model_i
+        if expand_multipipes:
+            for est_name,result in cv_results.items():
+                if type(result['estimator'][0]) is MultiPipe:
+                    self.logger.info(f'expanding multipipe: {est_name}')
+                    new_results={}
+                    for mp in results['estimator']:
+                        for est_n,m in mp.build_individual_fitted_pipelines().items():
+                            if not est_n in new_results:
+                                new_results[est_n]=[]
+                            new_results[est_n].append(m)
+                    for est_n in new_results:
+                        if est_n in cv_results:
+                            est_n+='_fcombo'
+                        self.cv_results[est_n]=new_results[est_n]
         self.cv_results=cv_results
         
     def getCV(self,):
@@ -106,6 +121,28 @@ class VBHelper:
                     yhat[test_rows]=cv_est.predict(self.X_df.iloc[test_rows])
                 yhat_dict[estimator_name].append(yhat)
         self.cv_yhat_dict=yhat_dict
+        
+        
+        def buildCVScoreDict(self):
+        try: self.cv_yhat_dict
+        except:self.predictCVYhat()
+        cv_results=self.cv_results
+        scorer_list=self.scorer_list
+        cv_score_dict={}
+        cv_score_dict_means={}
+        
+        
+        
+        
+        for idx,(estimator_name,result) in enumerate(cv_results.items()):
+            #cv_estimators=result['estimator']
+            model_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
+            cv_score_dict[estimator_name]=model_idx_scoredict 
+            model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
+            cv_score_dict_means[estimator_name]=model_idx_mean_scores
+        self.cv_score_dict_means=cv_score_dict_means
+        self.cv_score_dict=cv_score_dict
+        
         
     def plotCVYhat(self,single_plot=True):
         colors = plt.get_cmap('tab10')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
@@ -146,19 +183,7 @@ class VBHelper:
         
             
     
-    def buildCVScoreDict(self):
-        cv_results=self.cv_results
-        scorer_list=self.scorer_list
-        cv_score_dict={}
-        cv_score_dict_means={}
-        for idx,(estimator_name,result) in enumerate(cv_results.items()):
-            #cv_estimators=result['estimator']
-            model_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
-            cv_score_dict[estimator_name]=model_idx_scoredict 
-            model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
-            cv_score_dict_means[estimator_name]=model_idx_mean_scores
-        self.cv_score_dict_means=cv_score_dict_means
-        self.cv_score_dict=cv_score_dict
+    
         
     def viewCVScoreDict(self):
         for scorer in self.scorer_list:
