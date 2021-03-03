@@ -37,38 +37,68 @@ class myLogger:
         self.logger = logging.getLogger(handlername)
         
 class VBHelper:
-    def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_groupcount=None,cv_strategy=None):
+    def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4):
+        self.cv_n_jobs=cv_n_jobs
+        self.run_stacked=run_stacked
+        self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
         self.test_share=test_share
-        self.cv_folds=cv_folds
-        self.cv_reps=cv_reps
-        self.cv_count=cv_reps*cv_folds
-        self.cv_strategy=cv_strategy
-        self.cv_groupcount=cv_groupcount
         self.rs=random_state
+        #below attributes moved to self.project_cv_dict
+        #self.cv_folds=cv_folds
+        #self.cv_reps=cv_reps
+        #self.cv_count=cv_reps*cv_folds
+        #self.cv_strategy=cv_strategy
+        #self.cv_groupcount=cv_groupcount
+        
         
         # below are added in the notebook
         self.scorer_list=None
         self.max_k=None
         self.estimator_dict=None
+        self.model_dict=None
         self.logger=logging.getLogger()
+        
+    def setProjectCVDict(self,cv_folds,cv_reps,cv_strategy):
+        if cv_folds is None:
+            cv_folds=10
+        if cv_reps is None:
+            cv_reps=1
+        cv_count=cv_reps*cv_folds
+        self.project_CV_dict={
+            'cv_folds':cv_folds,
+            'cv_reps':cv_reps,
+            'cv_count': cv_count,
+            'cv_strategy':cv_strategy
+        }
+        
+    
     
     def setData(self,X_df,y_df):
         self.X_df=X_df
         self.y_df=y_df
         self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
-        print(self.cat_idx,self.cat_vars)
+        #print(self.cat_idx,self.cat_vars)
 
     def train_test_split(self):
         return train_test_split(
             self.X_df, self.y_df, 
             test_size=self.test_share,random_state=self.rs)
     
-    
-    
+    def setEstimatorDict(self,estimator_dict):
+        if self.run_stacked:
+            self.estimator_dict={'multi_pipe':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(estimator_dict.items())}}} #list...items() creates a list of tuples...
+        else:
+            self.estimator_dict=estimator_dict
+        
+    def setModelDict(self):
+        self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.estimator_dict.items()}
     
         
-    def runCrossValidate(self,n_jobs=4,expand_multipipes=True):
+    def runCrossValidate(self):
+        
+        #expand_multipipes kwarg replaced with self.run_stacked
+        n_jobs=self.cv_n_jobs
         cv_results={}
         for estimator_name,model in self.model_dict.items():
             start=time()
@@ -78,12 +108,13 @@ class VBHelper:
             end=time()
             print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
             cv_results[estimator_name]=model_i
-        if expand_multipipes:
+        if self.run_stacked:
             for est_name,result in cv_results.items():
                 if type(result['estimator'][0]) is MultiPipe:
                     self.logger.info(f'expanding multipipe: {est_name}')
                     new_results={}
-                    for mp in results['estimator']:
+                    for mp in result['estimator']:
+                        print(mp)
                         for est_n,m in mp.build_individual_fitted_pipelines().items():
                             if not est_n in new_results:
                                 new_results[est_n]=[]
@@ -94,16 +125,21 @@ class VBHelper:
                         self.cv_results[est_n]=new_results[est_n]
         self.cv_results=cv_results
         
-    def getCV(self,):
-        if self.cv_strategy is None:
+    def getCV(self,cv_dict=None):
+        if cv_dict is None:
+            cv_dict=self.project_CV_dict
+        cv_reps=cv_dict['cv_reps']
+        cv_folds=cv_dict['cv_folds']
+        cv_strategy=cv_dict['cv_strategy']
+        if cv_strategy is None:
             return RepeatedKFold(
-                n_splits=self.cv_folds, n_repeats=self.cv_reps, random_state=self.rs)
+                n_splits=cv_folds, n_repeats=cv_reps, random_state=self.rs)
         else:
-            if self.cv_groupcount is None:
-                self.cv_groupcount=5
+            assert type(cv_strategy) is tuple,f'expecting tuple for cv_strategy, got {cv_strategy}'
+            cv_strategy,cv_groupcount=cv_strategy
             return regressor_q_stratified_cv(
-                n_splits=self.cv_folds, n_repeats=self.cv_reps, 
-                random_state=self.rs,groupcount=self.cv_groupcount,strategy=self.cv_strategy)
+                n_splits=cv_folds, n_repeats=cv_reps, 
+                random_state=self.rs,groupcount=cv_groupcount,strategy=cv_strategy)
 
     def predictCVYhat(self,):
         train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df)))
@@ -123,7 +159,7 @@ class VBHelper:
         self.cv_yhat_dict=yhat_dict
         
         
-        def buildCVScoreDict(self):
+    def buildCVScoreDict(self):
         try: self.cv_yhat_dict
         except:self.predictCVYhat()
         cv_results=self.cv_results

@@ -1,4 +1,4 @@
-import logging
+import logging,os
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -13,18 +13,48 @@ from sklearn.impute import SimpleImputer,KNNImputer
 
 from vb_transformers import none_T,featureNameExtractor
 #,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
-from vb_helper import myLogger
+#from vb_helper import myLogger
 
-
+class myLogger:
+    def __init__(self,name=None):
+        if name is None:
+            name='missingval.log'
+        else:
+            if name[-4:]!='.log':
+                name+='.log'
+        logdir=os.path.join(os.getcwd(),'log'); 
+        if not os.path.exists(logdir):os.mkdir(logdir)
+        handlername=os.path.join(logdir,name)
+        logging.basicConfig(
+            handlers=[logging.handlers.RotatingFileHandler(handlername, maxBytes=10**7, backupCount=100)],
+            level=logging.DEBUG,
+            format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+            datefmt='%Y-%m-%dT%H:%M:%S')
+        self.logger = logging.getLogger(handlername)
 
 
 class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
     # https://scikit-learn.org/stable/auto_examples/compose/plot_column_transformer_mixed_types.html#use-columntransformer-by-selecting-column-by-names
-    def __init__(self,strategy='drop_row',transformer=None,cat_idx=None,):
-        self.strategy=strategy
-        self.transformer=transformer
-        self.cat_idx=cat_idx
+    def __init__(self,prep_dict=None):
+    #def __init__(self,strategy='drop_row',transformer=None,cat_idx=None,):
+        #self.strategy=strategy
+        #self.transformer=transformer
+        #self.cat_idx=cat_idx
+        self.prep_dict=prep_dict
+        #print(prep_dict)
+        self.setPrepDictAttrs()
         myLogger.__init__(self,name='missingValHandler.log')
+    
+    def setPrepDictAttrs(self):
+        
+        if 'impute_strategy' in self.prep_dict:
+            self.strategy=self.prep_dict['impute_strategy']
+        else:self.strategy='drop_row'
+        if 'cat_idx' in self.prep_dict:
+            self.cat_idx=self.prep_dict['cat_idx']
+        else:self.cat_idx=None
+            
+        
     def fit(self,X,y):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)

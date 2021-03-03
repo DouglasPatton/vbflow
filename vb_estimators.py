@@ -12,21 +12,35 @@ from sklearn.model_selection import cross_validate, train_test_split, RepeatedKF
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.compose import TransformedTargetRegressor
 import matplotlib.pyplot as plt
-from vb_helper import myLogger,VBHelper
 from vb_transformers import shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,none_T,log_T, logp1_T,dropConst,columnBestTransformer
 from missing_val_transformer import missingValHandler
-from nonlinear_stacker import stackNonLinearTransforms
+#NOT implemented: from nonlinear_stacker import stackNonLinearTransforms
 import os
 import pandas as pd
 from vb_cross_validator import regressor_q_stratified_cv
-
+import logging
 try:
     import daal4py.sklearn
     daal4py.sklearn.patch_sklearn()
 except:
     print('no daal4py')
 
-
+class myLogger:
+    def __init__(self,name=None):
+        if name is None:
+            name='vb_estimators.log'
+        else:
+            if name[-4:]!='.log':
+                name+='.log'
+        logdir=os.path.join(os.getcwd(),'log'); 
+        if not os.path.exists(logdir):os.mkdir(logdir)
+        handlername=os.path.join(logdir,name)
+        logging.basicConfig(
+            handlers=[logging.handlers.RotatingFileHandler(handlername, maxBytes=10**7, backupCount=100)],
+            level=logging.DEBUG,
+            format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+            datefmt='%Y-%m-%dT%H:%M:%S')
+        self.logger = logging.getLogger(handlername)
 
 class BaseHelper:
     def __init__(self):
@@ -179,8 +193,8 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
 class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(
         self,do_prep=True,functional_form_search =False,
-        impute_strategy='impute_knn5',gridpoints=4,
-        cv_strategy=None,groupcount=None,bestT=False,
+        prep_dict={'impute_strategy':'impute_knn5'},gridpoints=4,
+        inner_cv=None,groupcount=None,bestT=False,
         cat_idx=None,float_idx=None,flex_kwargs={}
         ):
         
@@ -189,21 +203,20 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.do_prep=do_prep
         self.functional_form_search=functional_form_search
         self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
+        self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        self.impute_strategy=impute_strategy
+        self.prep_dict=prep_dict
         self.flex_kwargs=flex_kwargs
         BaseHelper.__init__(self)
         
     def get_pipe(self,):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=3, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
-        else:
+        if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+        else:
+            inner_cv=self.inner_cv
             
         steps=[
             ('scaler',StandardScaler()),
@@ -222,34 +235,33 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 
         outerpipe=GridSearchCV(pipe,param_grid=param_grid)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
             
         return outerpipe
     
 class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,impute_strategy='impute_knn5',
-                 gridpoints=4,cv_strategy=None,groupcount=None,
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
+                 gridpoints=4,inner_cv=None,groupcount=None,
                  bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.do_prep=do_prep
         self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
+        self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        self.impute_strategy=impute_strategy
+        self.prep_dict=prep_dict
         BaseHelper.__init__(self)
     
     def get_pipe(self,):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=3, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
-        else:
+        if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+        else:
+            inner_cv=self.inner_cv
         
         steps=[('reg',LassoLarsCV(cv=inner_cv,))]
         if self.bestT:
@@ -257,29 +269,29 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         outerpipe=Pipeline(steps=steps)
         
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         
         return outerpipe
     
 class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,impute_strategy='impute_knn5',cv_strategy=None,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
         self.do_prep=do_prep
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        self.impute_strategy=impute_strategy
-        self.cv_strategy=cv_strategy
+        self.prep_dict=prep_dict
+        self.inner_cv=inner_cv
         BaseHelper.__init__(self)
     def get_pipe(self):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=3, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
-        else:
+        if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+        else:
+            inner_cv=self.inner_cv
+            
         param_grid={}#'max_depth':list(range(2,5)),
                     #'n_estimators':[100,500,1000]
                     #   }
@@ -289,7 +301,7 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
         outerpipe= Pipeline(steps=steps)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
@@ -315,65 +327,64 @@ class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 
 
 class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,impute_strategy='impute_knn5',
-                 gridpoints=4,cv_strategy=None,groupcount=None,
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
+                 gridpoints=4,inner_cv=None,groupcount=None,
                  float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='enet.log')
         self.logger.info('starting enet logger')
         self.do_prep=do_prep
         self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
+        self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.float_idx=float_idx
         self.cat_idx=cat_idx
         self.bestT=bestT
-        self.impute_strategy=impute_strategy
+        self.prep_dict=prep_dict
         BaseHelper.__init__(self)
 
     def get_pipe(self,):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=3, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
+        if self.inner_cv is None:
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
         else:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=2, random_state=0)
+            inner_cv=self.inner_cv
         gridpoints=self.gridpoints
-        param_grid={'l1_ratio':np.logspace(-2,-.03,gridpoints)}
+        param_grid={'l1_ratio':1-np.logspace(-2,-.03,gridpoints)}
         steps=[
             ('scaler',StandardScaler()),
-            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False),param_grid=param_grid))]
+            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False),param_grid=param_grid))]#rewrite to pass list of values to l1_ratio instad of gridsearccv
             #('reg',ElasticNetCV(cv=inner_cv,normalize=True))]
             
         if self.bestT:
             steps.insert(0,('xtransform',columnBestTransformer(float_k=len(self.float_idx))))
         outerpipe=Pipeline(steps=steps)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
 
 class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,impute_strategy='impute_knn5',
-                 gridpoints=4,cv_strategy=None,groupcount=None,
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
+                 gridpoints=4,inner_cv=None,groupcount=None,
                  float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.do_prep=do_prep
         self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
+        self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        self.impute_strategy=impute_strategy
+        self.prep_dict=prep_dict
         BaseHelper.__init__(self)
     
     def get_pipe(self,):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=3, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
-        else:
+        if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+        else:
+            inner_cv=self.inner_cv
+            
         gridpoints=self.gridpoints
         param_grid={'C':np.logspace(-2,2,gridpoints),
                    'gamma':np.logspace(-2,0.5,gridpoints)}
@@ -384,7 +395,7 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             steps.insert(0,('xtransform',columnBestTransformer(float_k=len(self.float_idx))))
         outerpipe=Pipeline(steps=steps)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
@@ -392,28 +403,28 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 
 
 class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,impute_strategy='impute_knn5',
-                 gridpoints=4,cv_strategy=None,groupcount=None,
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
+                 gridpoints=4,inner_cv=None,groupcount=None,
                  bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.do_prep=do_prep
         self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
+        self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        self.impute_strategy=impute_strategy
+        self.prep_dict=prep_dict
         BaseHelper.__init__(self)
         
     
     def get_pipe(self,):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=3, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
-        else:
+        if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+        else:
+            inner_cv=self.inner_cv
+            
         gridpoints=self.gridpoints
         param_grid={'C':np.logspace(-2,4,gridpoints)}
         steps=[
@@ -428,35 +439,34 @@ class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
         outerpipe=Pipeline(steps=steps)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
 
         
 class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,impute_strategy='impute_knn5',
-                 gridpoints=4,cv_strategy=None,groupcount=None,
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
+                 gridpoints=4,inner_cv=None,groupcount=None,
                  bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.do_prep=do_prep
         self.gridpoints=gridpoints
-        self.cv_strategy=cv_strategy
+        self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
-        self.impute_strategy=impute_strategy
+        self.prep_dict=prep_dict
         BaseHelper.__init__(self)
     
     
     def get_pipe(self,):
-        if self.cv_strategy:
-            inner_cv=regressor_q_stratified_cv(n_splits=10,n_repeats=1, strategy=self.cv_strategy,random_state=0,groupcount=self.groupcount)
-        
+        if self.inner_cv is None:
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
         else:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
+            inner_cv=self.inner_cv
         gridpoints=self.gridpoints
         transformer_list=[none_T(),log_T(),logp1_T()]#,logp1_T()] # log_T()]#
         steps=[
@@ -481,7 +491,7 @@ class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         }
         outerpipe= GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         
@@ -498,26 +508,30 @@ class NullModel(BaseEstimator,RegressorMixin):
         return x
  
 class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,pipelist=[('gbr',GBR)],kwargs_list={},impute_strategy='impute_knn5',cat_idx=None):
+    def __init__(self,pipelist=None,prep_dict=None,stacker_estimator=None):
         myLogger.__init__(self,name='multipipe.log')
         self.pipelist=pipelist
-        self.kwargs_list=kwargs_list
-        self.cat_idx=cat_idx
-        self.impute_strategy=impute_strategy
+        self.prep_dict=self.getPrepDict(prep_dict)
+        self.stacker_estimator=stacker_estimator
         BaseHelper.__init__(self)
+    
+    def getPrepDict(self,prep_dict):
+        if prep_dict is None:
+            for pname,pdict in self.pipelist:
+                if 'prep_dict' in pdict['pipe_kwargs']:
+                    return pdict['pipe_kwargs']['prep_dict']
+            assert False,f'no prep_dict found in any pipedict within self.pipelist:{self.pipelist}'
+        else: return prep_dict
+                
         
     def get_pipe(self):
+        
         try:
             pipe_n=len(self.pipelist)
-            if type(self.kwargs_list) is dict:
-                self.kwargs_list=[self.kwargs_list]*pipe_n
-            #for kwargs in self.kwargs_list:
-            #    kwargs['do_prep']=False
-            est_pipes=[(p[0],p[1](**self.kwargs_list[i])) for i,p in enumerate(self.pipelist)]
-            final_e=None#NullModel()
+            est_pipes=[(p[0],p[1]['pipe'](**p[1]['pipe_kwargs'])) for i,p in enumerate(self.pipelist)]
+            final_e=self.stacker_estimator
             steps=[
-                ('prep',missingValHandler(
-                    strategy=self.impute_strategy,cat_idx=self.cat_idx)),
+                ('prep',missingValHandler(prep_dict=self.prep_dict)),
                 ('post',StackingRegressor(est_pipes,passthrough=False,final_estimator=final_e,n_jobs=1))]   
             return Pipeline(steps=steps)
         except:
@@ -584,7 +598,7 @@ class FCombo(BaseEstimator,RegressorMixin,myLogger):
         Xt=X.copy()
         for s in range(0,step_n-1):
             Xt=self.fitted_steps[s][1].transform(Xt)
-        return self.fitted_steps[-1][1]d.predict(Xt)
+        return self.fitted_steps[-1][1].predict(Xt)
         
         return yhat
     
