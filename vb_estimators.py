@@ -18,7 +18,7 @@ from missing_val_transformer import missingValHandler
 import os
 import pandas as pd
 from vb_cross_validator import regressor_q_stratified_cv
-import logging
+import logging, logging.handlers
 try:
     import daal4py.sklearn
     daal4py.sklearn.patch_sklearn()
@@ -48,7 +48,8 @@ class BaseHelper:
     def fit(self,X,y):
         self.n_,self.k_=X.shape
         #self.logger(f'self.k_:{self.k_}')
-        self.pipe_=self.get_pipe()
+        
+        self.pipe_=self.get_pipe() 
         self.pipe_.fit(X,y)
         return self
     def transform(self,X,y=None):
@@ -210,6 +211,7 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.float_idx=float_idx
         self.prep_dict=prep_dict
         self.flex_kwargs=flex_kwargs
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
         
     def get_pipe(self,):
@@ -255,6 +257,7 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     
     def get_pipe(self,):
@@ -285,6 +288,7 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.float_idx=float_idx
         self.prep_dict=prep_dict
         self.inner_cv=inner_cv
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     def get_pipe(self):
         if self.inner_cv is None:
@@ -313,6 +317,7 @@ class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.do_prep=do_prep
         self.cat_idx=cat_idx
         self.float_idx=float_idx
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     def get_pipe(self):
         steps=[
@@ -340,6 +345,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.bestT=bestT
         self.prep_dict=prep_dict
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
 
     def get_pipe(self,):
@@ -377,6 +383,7 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     
     def get_pipe(self,):
@@ -416,6 +423,7 @@ class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
         
     
@@ -459,6 +467,7 @@ class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     
     
@@ -513,9 +522,17 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.pipelist=pipelist
         self.prep_dict=self.getPrepDict(prep_dict)
         self.stacker_estimator=stacker_estimator
+        
+        self.pipe_=self.get_pipe() #formerly inside basehelper
         BaseHelper.__init__(self)
-    
+    """def fit(self,X,y):
+        self.pipe_.fit(X,y=y)
+        return self"""
+        
     def getPrepDict(self,prep_dict):
+        if self.pipelist is None:
+            print('empty MultiPipe!')
+            return None
         if prep_dict is None:
             for pname,pdict in self.pipelist:
                 if 'prep_dict' in pdict['pipe_kwargs']:
@@ -532,7 +549,7 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             final_e=self.stacker_estimator
             steps=[
                 ('prep',missingValHandler(prep_dict=self.prep_dict)),
-                ('post',StackingRegressor(est_pipes,passthrough=False,final_estimator=final_e,n_jobs=1))]   
+                ('post',make_pipeline(StackingRegressor(est_pipes,passthrough=False,final_estimator=final_e,n_jobs=1)))]   
             return Pipeline(steps=steps)
         except:
             self.logger.exception(f'error')
@@ -549,7 +566,7 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             names=[names]
         pipe_dict={} 
         for name in names:
-            pipe_dict[name]=self.pipe_['post'].named_estimators_[name]
+            pipe_dict[name]=self.pipe_['post']['stackingregressor'].named_estimators_[name]
         return pipe_dict
     
     def get_prep(self):
@@ -600,7 +617,6 @@ class FCombo(BaseEstimator,RegressorMixin,myLogger):
             Xt=self.fitted_steps[s][1].transform(Xt)
         return self.fitted_steps[-1][1].predict(Xt)
         
-        return yhat
     
     
     

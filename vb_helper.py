@@ -1,18 +1,18 @@
 from time import time
-import logging
+import logging, logging.handlers
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import ElasticNet, LinearRegression, Lars
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import mean_squared_error, make_scorer
+from sklearn.metrics import mean_squared_error, make_scorer,get_scorer
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
-from vb_estimators import MultiPipe,FCombo
+from vb_estimators import MultiPipe,FCombo,NullModel
 
 #import sys
 #sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
@@ -74,16 +74,15 @@ class VBHelper:
     
     
     def setData(self,X_df,y_df):
-        self.X_df=X_df
-        self.y_df=y_df
+        if self.test_share>0:
+            self.X_df,self.X_test,self.y_df,self.y_test=train_test_split(
+                X_df, y_df,test_size=self.test_share,random_state=self.rs)
+        else:
+            self.X_df=X_df;self.y_df=y_df
+            self.X_test=None;self.y_test=None
         self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
-        #print(self.cat_idx,self.cat_vars)
 
-    def train_test_split(self):
-        return train_test_split(
-            self.X_df, self.y_df, 
-            test_size=self.test_share,random_state=self.rs)
     
     def setEstimatorDict(self,estimator_dict):
         if self.run_stacked:
@@ -91,15 +90,22 @@ class VBHelper:
         else:
             self.estimator_dict=estimator_dict
         
-    def setModelDict(self):
-        self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.estimator_dict.items()}
+    def setModelDict(self,pipe_dict=None):
+        if pipe_dict is None:
+            self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.estimator_dict.items()}
+        else: 
+            return {key:val['pipe'](**val['pipe_kwargs']) for key,val in pipe_dict.items()}
+            
+    """def implement_pipe(self,pipe_dict=None):
+        else:
+            return pipe_dict['pipe]']"""
     
         
     def runCrossValidate(self):
         
         #expand_multipipes kwarg replaced with self.run_stacked
         n_jobs=self.cv_n_jobs
-        cv_results={}
+        cv_results={};new_cv_results={}
         for estimator_name,model in self.model_dict.items():
             start=time()
             model_i=cross_validate(
@@ -114,7 +120,6 @@ class VBHelper:
                     self.logger.info(f'expanding multipipe: {est_name}')
                     new_results={}
                     for mp in result['estimator']:
-                        print(mp)
                         for est_n,m in mp.build_individual_fitted_pipelines().items():
                             if not est_n in new_results:
                                 new_results[est_n]=[]
@@ -122,7 +127,8 @@ class VBHelper:
                     for est_n in new_results:
                         if est_n in cv_results:
                             est_n+='_fcombo'
-                        self.cv_results[est_n]=new_results[est_n]
+                        new_cv_results[est_n]={'estimator':new_results[est_n]}
+            cv_results={**new_cv_results,**cv_results}
         self.cv_results=cv_results
         
     def getCV(self,cv_dict=None):
@@ -142,21 +148,34 @@ class VBHelper:
                 random_state=self.rs,groupcount=cv_groupcount,strategy=cv_strategy)
 
     def predictCVYhat(self,):
+        cv_reps=self.project_CV_dict['cv_reps']
+        cv_folds=self.project_CV_dict['cv_folds']
         train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df)))
         n,k=self.X_df.shape
+        y=self.y_df.to_numpy()
         data_idx=np.arange(n)
-        yhat_dict={}
+        yhat_dict={};err_dict={};cv_y_yhat_dict={}
         for idx,(estimator_name,result) in enumerate(self.cv_results.items()):
             yhat_dict[estimator_name]=[]
-            for r in range(self.cv_reps):
+            cv_y_yhat_dict[estimator_name]=[]
+            err_dict[estimator_name]=[]
+            for r in range(cv_reps):
                 yhat=np.empty([n,])
-                for s in range(self.cv_folds): # s for split
-                    m=r*self.cv_folds+s
+                err=np.empty([n,])
+                for s in range(cv_folds): # s for split
+                    m=r*cv_folds+s
                     cv_est=result['estimator'][m]
                     test_rows=test_idx_list[m]
-                    yhat[test_rows]=cv_est.predict(self.X_df.iloc[test_rows])
+                    yhat_arr=cv_est.predict(self.X_df.iloc[test_rows])
+                    yhat[test_rows]=yhat_arr
+                    err[test_rows]=y[test_rows]-yhat[test_rows]
+                    cv_y_yhat_dict[estimator_name].append((self.y_df.iloc[test_rows].to_numpy(),yhat_arr))
                 yhat_dict[estimator_name].append(yhat)
+                err_dict[estimator_name].append(err)
+            
         self.cv_yhat_dict=yhat_dict
+        self.cv_y_yhat_dict=cv_y_yhat_dict
+        self.cv_err_dict=err_dict
         
         
     def buildCVScoreDict(self):
@@ -167,12 +186,18 @@ class VBHelper:
         cv_score_dict={}
         cv_score_dict_means={}
         
-        
-        
-        
         for idx,(estimator_name,result) in enumerate(cv_results.items()):
             #cv_estimators=result['estimator']
-            model_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
+            model_idx_scoredict={}
+            for scorer in scorer_list:
+                scorer_kwarg=f'test_{scorer}'
+                #if scorer_kwarg in result:
+                #    model_idx_scoredict[scorer]=result[scorer_kwarg]
+                #else:
+                a_scorer=lambda y,yhat:get_scorer(scorer)(NullModel(),yhat,y) #b/c get_scorer wants (est,x,y)
+                score=np.array([a_scorer(*y_yhat) for y_yhat in self.cv_y_yhat_dict[estimator_name]])#y_yhat is a tup with (y,yhat) in cv order
+                model_idx_scoredict[scorer]=score
+            #nmodel_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
             cv_score_dict[estimator_name]=model_idx_scoredict 
             model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
             cv_score_dict_means[estimator_name]=model_idx_mean_scores
@@ -181,9 +206,11 @@ class VBHelper:
         
         
     def plotCVYhat(self,single_plot=True):
+        cv_count=self.project_CV_dict['cv_count']
+        cv_reps=self.project_CV_dict['cv_reps']
         colors = plt.get_cmap('tab10')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,15])
-        plt.suptitle(f"Y and CV-test Yhat Across {self.cv_count} Cross Validation Runs. ")
+        plt.suptitle(f"Y and CV-test Yhat Across {cv_count} Cross Validation Runs. ")
         
         #ax.set_xlabel('estimator')
         #ax.set_ylabel(scorer)
@@ -193,7 +220,7 @@ class VBHelper:
         n=y.shape[0]
         y_sort_idx=np.argsort(y)
         
-        xidx_stack=np.concatenate([np.arange(n) for _ in range(self.cv_reps)],axis=0)
+        xidx_stack=np.concatenate([np.arange(n) for _ in range(cv_reps)],axis=0)
         est_count=len(self.cv_yhat_dict)
         if single_plot:
             ax=fig.add_subplot(111)
@@ -211,29 +238,22 @@ class VBHelper:
             ax.legend(loc=2)
         
         
-        
-        
-        
-        
-        
-        
-            
-    
     
         
     def viewCVScoreDict(self):
         for scorer in self.scorer_list:
             print(f'scores for scorer: {scorer}:')
-        for estimator_name in self.model_dict:
-            print(f'    {estimator_name}:{self.cv_score_dict_means[estimator_name][scorer]}')
+            for estimator_name in self.model_dict:
+                print(f'    {estimator_name}:{self.cv_score_dict_means[estimator_name][scorer]}')
     
     def plotCVScores(self,sort=1):
+        cv_count=self.project_CV_dict['cv_count']
         cv_score_dict=self.cv_score_dict
         colors = plt.get_cmap('tab20')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,15])
-        plt.suptitle(f"Model Scores Across {self.cv_count} Cross Validation Runs. ")
+        plt.suptitle(f"Model Scores Across {cv_count} Cross Validation Runs. ")
         s_count=len(self.scorer_list)
-        xidx=np.arange(self.cv_count) # place holder for scatterplot
+        xidx=np.arange(cv_count) # place holder for scatterplot
 
         for s_idx, scorer in enumerate(self.scorer_list):
             ax=fig.add_subplot(f'{s_count}1{s_idx}')
