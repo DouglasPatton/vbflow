@@ -311,12 +311,11 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         return outerpipe
         
 class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,cat_idx=None,float_idx=None):
+    def __init__(self,do_prep=True,prep_dict=None):
         myLogger.__init__(self,name='HGBR.log')
         self.logger.info('starting histogram_gradient_boosting_reg logger')
         self.do_prep=do_prep
-        self.cat_idx=cat_idx
-        self.float_idx=float_idx
+        self.prep_dict=prep_dict
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     def get_pipe(self):
@@ -325,7 +324,7 @@ class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         ]
         outerpipe= Pipeline(steps=steps)
         if self.do_prep:
-            steps=[('prep',missingValHandler(strategy='pass-through',cat_idx=self.cat_idx)),
+            steps=[('prep',missingValHandler(prep_dict=dict(impute_strategy='pass-through',cat_idx=self.prep_dict['cat_idx']))),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
@@ -354,11 +353,12 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         else:
             inner_cv=self.inner_cv
         gridpoints=self.gridpoints
-        param_grid={'l1_ratio':1-np.logspace(-2,-.03,gridpoints)}
+        #param_grid={'l1_ratio':1-np.logspace(-2,-.03,gridpoints)}
+        l1_ratio=1-np.logspace(-2,-.03,gridpoints)
         steps=[
             ('scaler',StandardScaler()),
-            ('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False),param_grid=param_grid))]#rewrite to pass list of values to l1_ratio instad of gridsearccv
-            #('reg',ElasticNetCV(cv=inner_cv,normalize=True))]
+            #('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False,),param_grid=param_grid))]#rewrite to pass list of values to l1_ratio instad of gridsearccv
+            ('reg',ElasticNetCV(cv=inner_cv,normalize=False,l1_ratio=l1_ratio))]
             
         if self.bestT:
             steps.insert(0,('xtransform',columnBestTransformer(float_k=len(self.float_idx))))
