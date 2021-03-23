@@ -101,6 +101,9 @@ class VBHelper:
         else:
             return pipe_dict['pipe]']"""
     
+    def fitModelDict(self,):
+        for pipe_name,pipe in self.model_dict.items():
+            pipe.fit(self.X_df,self.y_df)
         
     def runCrossValidate(self):
         
