@@ -13,6 +13,7 @@ from sklearn.model_selection import cross_validate, train_test_split, RepeatedKF
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 from vb_estimators import MultiPipe,FCombo,NullModel
+import json
 
 #import sys
 #sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
@@ -177,6 +178,13 @@ class VBHelper:
         self.cv_y_yhat_dict=cv_y_yhat_dict
         self.cv_err_dict=err_dict
         
+    def jsonifyProjectCVResults(self):
+        full_results={'cv_y_yhat':self.cv_y_yhat_dict,'cv_score':self.cv_score_dict}
+        self.full_results=full_results
+        df=pd.DataFrame(full_results)
+        with open('projec_cv_results.json','w') as f:
+            df.to_json(f)
+        
         
     def buildCVScoreDict(self):
         try: self.cv_yhat_dict
@@ -225,7 +233,9 @@ class VBHelper:
         if single_plot:
             ax=fig.add_subplot(111)
             ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.9,label='y')
-        for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
+        #for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
+        for e,(est_name,y_yhat_tuplist) in enumerate(self.cv_y_yhat_dict.items()):
+            y_list,yhat_list=zip(*y_yhat_tuplist)
             if not single_plot:
                 ax=fig.add_subplot(est_count,1,e+1)
                 ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.7,label='y')
