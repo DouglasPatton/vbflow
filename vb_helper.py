@@ -235,7 +235,7 @@ class VBHelper:
             ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.9,label='y')
         #for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
         for e,(est_name,y_yhat_tuplist) in enumerate(self.cv_y_yhat_dict.items()):
-            y_list,yhat_list=zip(*y_yhat_tuplist)
+            y_list,yhat_list=zip(*y_yhat_tuplist) # y_list is the same y repeated
             if not single_plot:
                 ax=fig.add_subplot(est_count,1,e+1)
                 ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.7,label='y')
