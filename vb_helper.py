@@ -13,7 +13,7 @@ from sklearn.model_selection import cross_validate, train_test_split, RepeatedKF
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 from vb_estimators import MultiPipe,FCombo,NullModel
-import json
+import json,pickle
 
 #import sys
 #sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
@@ -37,8 +37,9 @@ class myLogger:
             datefmt='%Y-%m-%dT%H:%M:%S')
         self.logger = logging.getLogger(handlername)
         
-class VBHelper:
+class VBHelper(VBPlotter):
     def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4):
+        super().__init__()
         self.cv_n_jobs=cv_n_jobs
         self.run_stacked=run_stacked
         self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
@@ -58,7 +59,15 @@ class VBHelper:
         self.estimator_dict=None
         self.model_dict=None
         self.logger=logging.getLogger()
-        
+        self.plotter=VBPlotter()
+    
+    
+    def pickleSelf(self,path=None):
+        if path is None:
+            path='vbhelper.pkl'
+        with open(path,'wb') as f:
+            pickle.dump(self,f)
+    
     def setProjectCVDict(self,cv_folds,cv_reps,cv_strategy):
         if cv_folds is None:
             cv_folds=10
@@ -101,7 +110,7 @@ class VBHelper:
         else:
             return pipe_dict['pipe]']"""
     
-    def fitModelDict(self,):
+    def fitFinalModelDict(self,):
         for pipe_name,pipe in self.model_dict.items():
             pipe.fit(self.X_df,self.y_df)
         
@@ -214,14 +223,20 @@ class VBHelper:
             cv_score_dict_means[estimator_name]=model_idx_mean_scores
         self.cv_score_dict_means=cv_score_dict_means
         self.cv_score_dict=cv_score_dict
-        
+    
+    
+    def plotCVYhatVsY(self,regulatory_standard=False,decision_criteria=False):
+        assert False,'not developed'
+    
+    
         
     def plotCVYhat(self,single_plot=True):
         cv_count=self.project_CV_dict['cv_count']
         cv_reps=self.project_CV_dict['cv_reps']
+        cv_folds=self.project_CV_dict['cv_folds']
         colors = plt.get_cmap('tab10')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,15])
-        plt.suptitle(f"Y and CV-test Yhat Across {cv_count} Cross Validation Runs. ")
+        plt.suptitle(f"Y and CV test Yhat Across {cv_reps} repetitions of CV.")
         
         #ax.set_xlabel('estimator')
         #ax.set_ylabel(scorer)
