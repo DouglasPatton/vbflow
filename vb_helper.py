@@ -13,6 +13,7 @@ from sklearn.model_selection import cross_validate, train_test_split, RepeatedKF
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 from vb_estimators import MultiPipe,FCombo,NullModel
+from vb_plotter import VBPlotter
 import json,pickle
 
 #import sys
@@ -39,7 +40,7 @@ class myLogger:
         
 class VBHelper(VBPlotter):
     def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4):
-        super().__init__()
+        
         self.cv_n_jobs=cv_n_jobs
         self.run_stacked=run_stacked
         self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
@@ -59,7 +60,8 @@ class VBHelper(VBPlotter):
         self.estimator_dict=None
         self.model_dict=None
         self.logger=logging.getLogger()
-        self.plotter=VBPlotter()
+        super().__init__() #instantiates parents (e.g., VBPlotter)
+        #self.plotter=VBPlotter()
     
     
     def pickleSelf(self,path=None):
@@ -224,7 +226,7 @@ class VBHelper(VBPlotter):
         self.cv_score_dict_means=cv_score_dict_means
         self.cv_score_dict=cv_score_dict
     
-    
+    '''
     def plotCVYhatVsY(self,regulatory_standard=False,decision_criteria=False):
         assert False,'not developed'
     
@@ -265,7 +267,7 @@ class VBHelper(VBPlotter):
         #ax.xaxis.set_visible(False)
             ax.legend(loc=2)
         
-        
+        '''
     
         
     def viewCVScoreDict(self):
