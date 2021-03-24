@@ -187,16 +187,18 @@ class VBHelper(VBPlotter):
                     cv_y_yhat_dict[estimator_name].append((self.y_df.iloc[test_rows].to_numpy(),yhat_arr))
                 yhat_dict[estimator_name].append(yhat)
                 err_dict[estimator_name].append(err)
+                
+        yhat_dict['y']=self.y_df.to_numpy()
             
         self.cv_yhat_dict=yhat_dict
-        self.cv_y_yhat_dict=cv_y_yhat_dict
+        #self.cv_y_yhat_dict=cv_y_yhat_dict
         self.cv_err_dict=err_dict
         
     def jsonifyProjectCVResults(self):
-        full_results={'cv_y_yhat':self.cv_y_yhat_dict,'cv_score':self.cv_score_dict}
+        full_results={'cv_yhat':self.cv_yhat_dict,'cv_score':self.cv_score_dict}
         self.full_results=full_results
         df=pd.DataFrame(full_results)
-        with open('projec_cv_results.json','w') as f:
+        with open('project_cv_results.json','w') as f:
             df.to_json(f)
         
         
@@ -207,7 +209,7 @@ class VBHelper(VBPlotter):
         scorer_list=self.scorer_list
         cv_score_dict={}
         cv_score_dict_means={}
-        
+        y=self.cv_yhat_dict['y']
         for idx,(estimator_name,result) in enumerate(cv_results.items()):
             #cv_estimators=result['estimator']
             model_idx_scoredict={}
@@ -217,7 +219,7 @@ class VBHelper(VBPlotter):
                 #    model_idx_scoredict[scorer]=result[scorer_kwarg]
                 #else:
                 a_scorer=lambda y,yhat:get_scorer(scorer)(NullModel(),yhat,y) #b/c get_scorer wants (est,x,y)
-                score=np.array([a_scorer(*y_yhat) for y_yhat in self.cv_y_yhat_dict[estimator_name]])#y_yhat is a tup with (y,yhat) in cv order
+                score=np.array([a_scorer(y,yhat) for yhat in self.cv_yhat_dict[estimator_name]])#
                 model_idx_scoredict[scorer]=score
             #nmodel_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
             cv_score_dict[estimator_name]=model_idx_scoredict 
