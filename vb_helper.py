@@ -15,6 +15,7 @@ from sklearn.impute import SimpleImputer,KNNImputer
 from vb_estimators import MultiPipe,FCombo,NullModel
 from vb_plotter import VBPlotter
 import json,pickle
+import joblib
 
 #import sys
 #sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
@@ -38,9 +39,10 @@ class myLogger:
             datefmt='%Y-%m-%dT%H:%M:%S')
         self.logger = logging.getLogger(handlername)
         
-class VBHelper(VBPlotter):
+class VBHelper(myLogger):
     def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4):
         
+        myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
         self.run_stacked=run_stacked
         self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
@@ -57,11 +59,11 @@ class VBHelper(VBPlotter):
         # below are added in the notebook
         self.scorer_list=None
         self.max_k=None
-        self.estimator_dict=None
+        self.pipe_dict=None
         self.model_dict=None
         self.logger=logging.getLogger()
-        super().__init__() #instantiates parents (e.g., VBPlotter)
-        #self.plotter=VBPlotter()
+        #super().__init__() #instantiates parents (e.g., VBPlotter)
+        self.plotter=VBPlotter()
     
     
     def pickleSelf(self,path=None):
@@ -96,15 +98,15 @@ class VBHelper(VBPlotter):
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
 
     
-    def setEstimatorDict(self,estimator_dict):
+    def setPipeDict(self,pipe_dict):
         if self.run_stacked:
-            self.estimator_dict={'multi_pipe':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(estimator_dict.items())}}} #list...items() creates a list of tuples...
+            self.pipe_dict={'multi_pipe':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples...
         else:
-            self.estimator_dict=estimator_dict
+            self.pipe_dict=pipe_dict
         
     def setModelDict(self,pipe_dict=None):
         if pipe_dict is None:
-            self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.estimator_dict.items()}
+            self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.pipe_dict.items()}
         else: 
             return {key:val['pipe'](**val['pipe_kwargs']) for key,val in pipe_dict.items()}
             
@@ -116,19 +118,32 @@ class VBHelper(VBPlotter):
         for pipe_name,pipe in self.model_dict.items():
             pipe.fit(self.X_df,self.y_df)
         
-    def runCrossValidate(self):
+    def runCrossValidate(self,try_load=True):
+        if not os.path.exists('stash'):
+            os.mkdir('stash')
+        
         
         #expand_multipipes kwarg replaced with self.run_stacked
         n_jobs=self.cv_n_jobs
         cv_results={};new_cv_results={}
-        for estimator_name,model in self.model_dict.items():
+        jhash=joblib.hash([self.X_df,self.y_df,self.pipe_dict,self.project_CV_dict]) #unique identifier
+        #jhash2=joblib.hash([self.X_df,self.y_df,self.pipe_dict]) 
+        #print('jhash',jhash)
+        #print('jhash2',jhash2)
+        fname=os.path.join('stash',f'cv_{jhash}.pkl')
+        if try_load and os.path.exists(fname):
+            with open(fname,'rb') as f:
+                self.cv_results=pickle.load(f)
+            return
+        
+        for pipe_name,model in self.model_dict.items():
             start=time()
             model_i=cross_validate(
                 model, self.X_df, self.y_df, return_estimator=True, 
                 scoring=self.scorer_list, cv=self.getCV(), n_jobs=n_jobs)
             end=time()
-            print(f"{estimator_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
-            cv_results[estimator_name]=model_i
+            print(f"{pipe_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
+            cv_results[pipe_name]=model_i
         if self.run_stacked:
             for est_name,result in cv_results.items():
                 if type(result['estimator'][0]) is MultiPipe:
@@ -145,6 +160,8 @@ class VBHelper(VBPlotter):
                         new_cv_results[est_n]={'estimator':new_results[est_n]}
             cv_results={**new_cv_results,**cv_results}
         self.cv_results=cv_results
+        with open(fname,'wb') as f:
+            pickle.dump(cv_results,f)
         
     def getCV(self,cv_dict=None):
         if cv_dict is None:
@@ -170,10 +187,10 @@ class VBHelper(VBPlotter):
         y=self.y_df.to_numpy()
         data_idx=np.arange(n)
         yhat_dict={};err_dict={};cv_y_yhat_dict={}
-        for idx,(estimator_name,result) in enumerate(self.cv_results.items()):
-            yhat_dict[estimator_name]=[]
-            cv_y_yhat_dict[estimator_name]=[]
-            err_dict[estimator_name]=[]
+        for idx,(pipe_name,result) in enumerate(self.cv_results.items()):
+            yhat_dict[pipe_name]=[]
+            cv_y_yhat_dict[pipe_name]=[]
+            err_dict[pipe_name]=[]
             for r in range(cv_reps):
                 yhat=np.empty([n,])
                 err=np.empty([n,])
@@ -184,22 +201,48 @@ class VBHelper(VBPlotter):
                     yhat_arr=cv_est.predict(self.X_df.iloc[test_rows])
                     yhat[test_rows]=yhat_arr
                     err[test_rows]=y[test_rows]-yhat[test_rows]
-                    cv_y_yhat_dict[estimator_name].append((self.y_df.iloc[test_rows].to_numpy(),yhat_arr))
-                yhat_dict[estimator_name].append(yhat)
-                err_dict[estimator_name].append(err)
+                    cv_y_yhat_dict[pipe_name].append((self.y_df.iloc[test_rows].to_numpy(),yhat_arr))
+                yhat_dict[pipe_name].append(yhat)
+                err_dict[pipe_name].append(err)
                 
-        yhat_dict['y']=self.y_df.to_numpy()
+        #yhat_dict['y']=self.y_df.to_numpy()
             
         self.cv_yhat_dict=yhat_dict
         #self.cv_y_yhat_dict=cv_y_yhat_dict
         self.cv_err_dict=err_dict
         
     def jsonifyProjectCVResults(self):
-        full_results={'cv_yhat':self.cv_yhat_dict,'cv_score':self.cv_score_dict}
+        full_results=self.arrayDictToListDict(
+            {
+                'y':self.y_df.to_list(),
+                'cv_yhat':self.cv_yhat_dict,
+                'cv_score':self.cv_score_dict,
+                'project_cv':self.project_CV_dict,
+                'cv_model_descrip':{} #not developed
+            }
+        )
         self.full_results=full_results
-        df=pd.DataFrame(full_results)
+        #df=pd.DataFrame(full_results)
         with open('project_cv_results.json','w') as f:
-            df.to_json(f)
+            #df.to_json(f)
+            json.dump(full_results,f)
+        print('setting plotter data')
+        self.plotter.setData(full_results)
+            
+    
+    def arrayDictToListDict(self,arr_dict):
+        assert type(arr_dict) is dict,f'expecting dict but type(arr_dict):{type(arr_dict)}'
+        list_dict={}
+        for key,val in arr_dict.items():
+            if type(val) is dict:
+                list_dict[key]=self.arrayDictToListDict(val)
+            elif type(val) is np.ndarray:
+                list_dict[key]=val.tolist()
+            elif type(val) is list and type(val[0]) is np.ndarray:
+                list_dict[key]=[v.tolist() for v in val]
+            else:
+                list_dict[key]=val
+        return list_dict
         
         
     def buildCVScoreDict(self):
@@ -209,8 +252,8 @@ class VBHelper(VBPlotter):
         scorer_list=self.scorer_list
         cv_score_dict={}
         cv_score_dict_means={}
-        y=self.cv_yhat_dict['y']
-        for idx,(estimator_name,result) in enumerate(cv_results.items()):
+        y=self.y_df
+        for idx,(pipe_name,result) in enumerate(cv_results.items()):
             #cv_estimators=result['estimator']
             model_idx_scoredict={}
             for scorer in scorer_list:
@@ -219,12 +262,12 @@ class VBHelper(VBPlotter):
                 #    model_idx_scoredict[scorer]=result[scorer_kwarg]
                 #else:
                 a_scorer=lambda y,yhat:get_scorer(scorer)(NullModel(),yhat,y) #b/c get_scorer wants (est,x,y)
-                score=np.array([a_scorer(y,yhat) for yhat in self.cv_yhat_dict[estimator_name]])#
+                score=np.array([a_scorer(y,yhat) for yhat in self.cv_yhat_dict[pipe_name]])#
                 model_idx_scoredict[scorer]=score
             #nmodel_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
-            cv_score_dict[estimator_name]=model_idx_scoredict 
+            cv_score_dict[pipe_name]=model_idx_scoredict 
             model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
-            cv_score_dict_means[estimator_name]=model_idx_mean_scores
+            cv_score_dict_means[pipe_name]=model_idx_mean_scores
         self.cv_score_dict_means=cv_score_dict_means
         self.cv_score_dict=cv_score_dict
     
@@ -263,7 +306,7 @@ class VBHelper(VBPlotter):
                 ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.7,label='y')
             yhat_stack=np.concatenate(yhat_list,axis=0)
             ax.scatter(xidx_stack,yhat_stack,color=colors[e],alpha=0.4,marker='_',s=7,label=f'yhat_{est_name}')
-            #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=estimator_name+' cv score='+str(np.mean(cv_score_dict[estimator_name][scorer])))
+            #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
             ax.grid(True)
         #ax.xaxis.set_ticks([])
         #ax.xaxis.set_visible(False)
@@ -275,10 +318,10 @@ class VBHelper(VBPlotter):
     def viewCVScoreDict(self):
         for scorer in self.scorer_list:
             print(f'scores for scorer: {scorer}:')
-            for estimator_name in self.model_dict:
-                print(f'    {estimator_name}:{self.cv_score_dict_means[estimator_name][scorer]}')
+            for pipe_name in self.model_dict:
+                print(f'    {pipe_name}:{self.cv_score_dict_means[pipe_name][scorer]}')
     
-    def plotCVScores(self,sort=1):
+    """def plotCVScores(self,sort=1):
         cv_count=self.project_CV_dict['cv_count']
         cv_score_dict=self.cv_score_dict
         colors = plt.get_cmap('tab20')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
@@ -292,17 +335,17 @@ class VBHelper(VBPlotter):
             #ax.set_xlabel('estimator')
             #ax.set_ylabel(scorer)
             ax.set_title(scorer)
-            for e_idx,estimator_name in enumerate(cv_score_dict.keys()):
-                scores=cv_score_dict[estimator_name][scorer]
+            for e_idx,pipe_name in enumerate(cv_score_dict.keys()):
+                scores=cv_score_dict[pipe_name][scorer]
                 if sort: scores.sort()
-                ax.plot(xidx,scores,color=colors[e_idx],alpha=0.5,label=estimator_name+' cv score='+str(np.mean(cv_score_dict[estimator_name][scorer])))
-                #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=estimator_name+' cv score='+str(np.mean(cv_score_dict[estimator_name][scorer])))
+                ax.plot(xidx,scores,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
+                #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
             ax.grid(True)
             ax.xaxis.set_ticks([])
             ax.xaxis.set_visible(False)
             ax.legend(loc=4)
             #fig.show()
-            
+            """
 
     
         
