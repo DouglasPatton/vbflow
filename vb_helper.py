@@ -108,7 +108,7 @@ class VBHelper(myLogger):
         if pipe_dict is None:
             self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.pipe_dict.items()}
         else: 
-            return {key:val['pipe'](**val['pipe_kwargs']) for key,val in pipe_dict.items()}
+            self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in pipe_dict.items()}
             
     """def implement_pipe(self,pipe_dict=None):
         else:

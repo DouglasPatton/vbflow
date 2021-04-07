@@ -107,6 +107,17 @@ class VBPlotter(myLogger):
             yhat_stack=np.concatenate(yhat_list,axis=0)
             yhat_stack_dict[est_name]=yhat_stack
         return yhat_stack_dict
+    
+    def setScoreDict(self):
+        scorer_score_dict={}
+
+        for pipe_name,score_dict in self.cv_score_dict.items():
+            for scorer,score_arr in score_dict.items():
+                if not scorer in scorer_score_dict:
+                    scorer_score_dict[scorer]={}
+                scorer_score_dict[scorer][pipe_name]=score_arr
+      
+        self.score_dict=scorer_score_dict
         
     def plotCVYhat(self,single_plot=True,include_all_cv=True):
         yhat_stack_dict=self.yhat_stack_dict
@@ -170,26 +181,13 @@ class VBPlotter(myLogger):
         fig.tight_layout()
         fig.show()
         
-    def setScoreDict(self):
-        scorer_score_dict={}
 
-        for pipe_name,score_dict in self.cv_score_dict.items():
-            for scorer,score_arr in score_dict.items():
-                if not scorer in scorer_score_dict:
-                    scorer_score_dict[scorer]={}
-                scorer_score_dict[scorer][pipe_name]=score_arr
-      
-        self.score_dict=scorer_score_dict
     
     def plotCVScores(self,sort=1):
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,15])
         plt.suptitle(f"Model Scores Across {self.cv_reps} Cross Validation repetitions. ")
         s_count=len(self.score_dict)
-        
-        
-        
-        
         for s_idx,(scorer,pipe_scores) in enumerate(self.score_dict.items()):
             ax=fig.add_subplot(s_count,1,s_idx+1)
             ax.set_title(scorer)
@@ -202,19 +200,3 @@ class VBPlotter(myLogger):
         fig.show() 
         
         
-        """for s_idx, scorer in enumerate(self.scorer_list):
-            ax=fig.add_subplot(f'{s_count}1{s_idx}')
-            #ax.set_xlabel('estimator')
-            #ax.set_ylabel(scorer)
-            ax.set_title(scorer)
-            for e_idx,pipe_name in enumerate(cv_score_dict.keys()):
-                scores=cv_score_dict[pipe_name][scorer]
-                if sort: scores.sort()
-                ax.plot(xidx,scores,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
-                #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
-            ax.grid(True)
-            ax.xaxis.set_ticks([])
-            ax.xaxis.set_visible(False)
-            ax.legend(loc=4)
-            #fig.show()
-            """

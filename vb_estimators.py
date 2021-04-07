@@ -216,7 +216,7 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         
     def get_pipe(self,):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
             
@@ -262,7 +262,7 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     
     def get_pipe(self,):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
         
@@ -292,13 +292,13 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         BaseHelper.__init__(self)
     def get_pipe(self):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
             
-        param_grid={}#'max_depth':list(range(2,5)),
-                    #'n_estimators':[100,500,1000]
-                    #   }
+        param_grid={'max_depth':list(range(1,3)),
+                    'n_estimators':[75,100]
+                       }
             
         steps=[('reg',GridSearchCV(GradientBoostingRegressor(random_state=0),param_grid=param_grid,cv=inner_cv))]
         if self.bestT:
@@ -349,7 +349,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 
     def get_pipe(self,):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
         gridpoints=self.gridpoints
@@ -388,7 +388,7 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     
     def get_pipe(self,):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
             
@@ -429,7 +429,7 @@ class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     
     def get_pipe(self,):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
             
@@ -473,7 +473,7 @@ class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     
     def get_pipe(self,):
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
         gridpoints=self.gridpoints
