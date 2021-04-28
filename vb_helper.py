@@ -39,6 +39,7 @@ class myLogger:
             datefmt='%Y-%m-%dT%H:%M:%S')
         self.logger = logging.getLogger(handlername)
         
+        
 class VBHelper(myLogger):
     def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4):
         
@@ -61,7 +62,10 @@ class VBHelper(myLogger):
         self.max_k=None
         self.pipe_dict=None
         self.model_dict=None
-        self.logger=logging.getLogger()
+        ##
+        self.prediction_model_type= "average"
+        self.model_averaging_weights=None
+        #self.logger=logging.getLogger()
         #super().__init__() #instantiates parents (e.g., VBPlotter)
         self.plotter=VBPlotter()
     
@@ -154,6 +158,8 @@ class VBHelper(myLogger):
                             if not est_n in new_results:
                                 new_results[est_n]=[]
                             new_results[est_n].append(m)
+                            lil_x=self.X_df.iloc[0:2]
+                            print(f'est_n yhat test: {m.predict(lil_x)}')
                     for est_n in new_results:
                         if est_n in cv_results:
                             est_n+='_fcombo'
@@ -271,49 +277,7 @@ class VBHelper(myLogger):
         self.cv_score_dict_means=cv_score_dict_means
         self.cv_score_dict=cv_score_dict
     
-    '''
-    def plotCVYhatVsY(self,regulatory_standard=False,decision_criteria=False):
-        assert False,'not developed'
-    
-    
-        
-    def plotCVYhat(self,single_plot=True):
-        cv_count=self.project_CV_dict['cv_count']
-        cv_reps=self.project_CV_dict['cv_reps']
-        cv_folds=self.project_CV_dict['cv_folds']
-        colors = plt.get_cmap('tab10')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
-        fig=plt.figure(figsize=[12,15])
-        plt.suptitle(f"Y and CV test Yhat Across {cv_reps} repetitions of CV.")
-        
-        #ax.set_xlabel('estimator')
-        #ax.set_ylabel(scorer)
-        #ax.set_title(scorer)
-        
-        y=self.y_df
-        n=y.shape[0]
-        y_sort_idx=np.argsort(y)
-        
-        xidx_stack=np.concatenate([np.arange(n) for _ in range(cv_reps)],axis=0)
-        est_count=len(self.cv_yhat_dict)
-        if single_plot:
-            ax=fig.add_subplot(111)
-            ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.9,label='y')
-        #for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
-        for e,(est_name,y_yhat_tuplist) in enumerate(self.cv_y_yhat_dict.items()):
-            y_list,yhat_list=zip(*y_yhat_tuplist) # y_list is the same y repeated
-            if not single_plot:
-                ax=fig.add_subplot(est_count,1,e+1)
-                ax.plot(np.arange(n),y.iloc[y_sort_idx],color='k',alpha=0.7,label='y')
-            yhat_stack=np.concatenate(yhat_list,axis=0)
-            ax.scatter(xidx_stack,yhat_stack,color=colors[e],alpha=0.4,marker='_',s=7,label=f'yhat_{est_name}')
-            #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
-            ax.grid(True)
-        #ax.xaxis.set_ticks([])
-        #ax.xaxis.set_visible(False)
-            ax.legend(loc=2)
-        
-        '''
-    
+   
         
     def viewCVScoreDict(self):
         for scorer in self.scorer_list:
@@ -321,32 +285,102 @@ class VBHelper(myLogger):
             for pipe_name in self.model_dict:
                 print(f'    {pipe_name}:{self.cv_score_dict_means[pipe_name][scorer]}')
     
-    """def plotCVScores(self,sort=1):
-        cv_count=self.project_CV_dict['cv_count']
-        cv_score_dict=self.cv_score_dict
-        colors = plt.get_cmap('tab20')(np.arange(20))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
-        fig=plt.figure(figsize=[12,15])
-        plt.suptitle(f"Model Scores Across {cv_count} Cross Validation Runs. ")
-        s_count=len(self.scorer_list)
-        xidx=np.arange(cv_count) # place holder for scatterplot
+    def refitPredictiveModels(self, selected_models: dict, y_df: pd.DataFrame, x_df: pd.DataFrame, verbose: bool=False):
+        # TODO: Add different process for each possible predictive_model_type
+        #self.logger = VBLogger(self.id)
+        self.logger.info("Refitting specified models for prediction...", 4)
+        predictive_models = {}
+        for name, indx in selected_models.items():
+            logger.info(f"Name: {name}, Index: {indx}")
+            if name in self.cv_results.keys():
+                if len(self.cv_results[name]["estimator"]) >= indx >= 0:
+                    predictive_models[f"{name}-{indx}"] = copy.copy(self.cv_results[name]["estimator"][indx])
+        logger.info(f"Models:{predictive_models}")
+        for name, est in predictive_models.items():
+            predictive_models[name] = est.fit(x_df, y_df)
+        self.predictive_models = predictive_models
+        self.logger.info("Refitting model for prediction complete.", 4)
 
-        for s_idx, scorer in enumerate(self.scorer_list):
-            ax=fig.add_subplot(f'{s_count}1{s_idx}')
-            #ax.set_xlabel('estimator')
-            #ax.set_ylabel(scorer)
-            ax.set_title(scorer)
-            for e_idx,pipe_name in enumerate(cv_score_dict.keys()):
-                scores=cv_score_dict[pipe_name][scorer]
-                if sort: scores.sort()
-                ax.plot(xidx,scores,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
-                #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=pipe_name+' cv score='+str(np.mean(cv_score_dict[pipe_name][scorer])))
-            ax.grid(True)
-            ax.xaxis.set_ticks([])
-            ax.xaxis.set_visible(False)
-            ax.legend(loc=4)
-            #fig.show()
-            """
+    def setModelAveragingWeights(self):
+        pipe_names=list(self.prediction_models.keys())
+        model_count=len(self.prediction_models)
+        if self.prediction_model_type == "average":
+            self.model_averaging_weights={
+                pipe_names[i]:{
+                    scorer:1/model_count for scorer in self.scorer_list
+                } for i in range(model_count)
+            }
+            return
+        elif self.prediction_model_type == "cv-weighted":
+            totals = {
+                "neg_mean_squared_error": 0,
+                "neg_mean_absolute_error": 0,
+                "r2": 0
+            }
+            value = {
+                "neg_mean_squared_error": 0,
+                "neg_mean_absolute_error": 0,
+                "r2": 0
+            }
+            for name, p in self.cv_score_dict_means.items():
+                if name in pipe_names: #leave out non-selected pipelines
+                    totals["neg_mean_squared_error"] += 1/abs(p["neg_mean_squared_error"])
+                    totals["neg_mean_absolute_error"] += 1/abs(p["neg_mean_absolute_error"])
+                    totals["r2"] += p["r2"] if p["r2"] > 0 else 0
+            weights = {}
+            for pipe_name in pipe_names:
+                weights[pipe_name] = {}
+                for scorer, score in self.cv_score_dict_means[pipe_name].items():
+                    # logger.warning(f"Scorer: {scorer}, Score: {score}")
+                    if "neg" == scorer[:3]:
+                        w = (1/(abs(score)))/totals[scorer]
+                    elif scorer == "r2":
+                        score = score if score > 0 else 0
+                        w = score / totals[scorer]
+                    else:
+                        w = abs(score) / totals[scorer]
 
+                    weights[pipe_name][scorer] = w
+            self.model_averaging_weights=weights
+            return
+        else:
+            assert False,'option not recognized'
     
+    def getPredictionValues(self,x_df):
+        prediction_results=self.predict(x_df)
+        test_results=self.predict(self.x_test)
+        collection={
+            'prediction_results':results,
+            'test_results':test_results,'test_y':self.y_test
+        }
+        return collection
         
+    
+    def predict(self, x_df: pd.DataFrame):
+        if self.model_averaging_weights is None:
+            self.setModelAveragingWeights()
+        results = {}
+        wtd_yhats={scorer:np.zeros(x_df.shape[0]) for scorer in self.scorer_list}
+        for name, est in self.prediction_models.items():
+            results[name] = est.predict(x_df)
+            
+            for scorer,weights in self.model_averaging_weights[name].items()
+                
+                    wtd_yhats[scorer] += weights * results[name]
+        results["weights"] = self.model_averaging_weights
+        results["prediction"] = wtd_yhats
+        #results["final-test-predictions"] = self.get_test_predictions()
+        return results
+
+    def get_test_predictions(self):
+        test_results = {}
+        if self.X_test is None:
+            return test_results
+        for name, est in self.prediction_models.items():
+            r = {
+                "y": self.y_test.to_list(),
+                "yhat": est.predict(self.X_test)
+            }
+            test_results[name] = r
+        return test_results
     
