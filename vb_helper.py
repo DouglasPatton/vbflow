@@ -118,9 +118,9 @@ class VBHelper(myLogger):
         else:
             return pipe_dict['pipe]']"""
     
-    def fitFinalModelDict(self,):
+    '''def fitFinalModelDict(self,):
         for pipe_name,pipe in self.model_dict.items():
-            pipe.fit(self.X_df,self.y_df)
+            pipe.fit(self.X_df,self.y_df)'''
         
     def runCrossValidate(self,try_load=True):
         if not os.path.exists('stash'):
@@ -287,25 +287,25 @@ class VBHelper(myLogger):
             for pipe_name in self.model_dict:
                 print(f'    {pipe_name}:{self.cv_score_dict_means[pipe_name][scorer]}')
     
-    def refitPredictiveModels(self, selected_models: dict, y_df: pd.DataFrame, x_df: pd.DataFrame, verbose: bool=False):
+    def refitPredictiveModels(self, selected_models: list,  verbose: bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
-        self.logger.info("Refitting specified models for prediction...", 4)
+        y_df=self.y_df
+        X_df=self.X_df
+        self.logger.info("Refitting specified models for prediction...")
         predictive_models = {}
-        for name, indx in selected_models.items():
-            logger.info(f"Name: {name}, Index: {indx}")
-            if name in self.cv_results.keys():
-                if len(self.cv_results[name]["estimator"]) >= indx >= 0:
-                    predictive_models[f"{name}-{indx}"] = copy.copy(self.cv_results[name]["estimator"][indx])
-        logger.info(f"Models:{predictive_models}")
+        for name in selected_models:
+            self.logger.info(f"Name: {name}")
+            predictive_models[name] = self.model_dict[name]#copy.copy(self.cv_results[name]["estimator"][indx])
+        self.logger.info(f"Models:{predictive_models}")
         for name, est in predictive_models.items():
-            predictive_models[name] = est.fit(x_df, y_df)
+            predictive_models[name] = est.fit(X_df, y_df)
         self.predictive_models = predictive_models
-        self.logger.info("Refitting model for prediction complete.", 4)
+        self.logger.info("Refitting model for prediction complete.")
 
     def setModelAveragingWeights(self):
-        pipe_names=list(self.prediction_models.keys())
-        model_count=len(self.prediction_models)
+        pipe_names=list(self.predictive_models.keys())
+        model_count=len(self.predictive_models)
         if self.prediction_model_type == "average":
             self.model_averaging_weights={
                 pipe_names[i]:{
@@ -348,8 +348,8 @@ class VBHelper(myLogger):
         else:
             assert False,'option not recognized'
     
-    def getPredictionValues(self,x_df):
-        prediction_results=self.predict(x_df)
+    def getPredictionValues(self,X_df_predict):
+        prediction_results=self.predict(X_df_predict)
         test_results=self.predict(self.x_test)
         collection={
             'prediction_results':results,
@@ -358,17 +358,27 @@ class VBHelper(myLogger):
         return collection
         
     
-    def predict(self, x_df: pd.DataFrame):
+    def predict(self, X_df_predict: pd.DataFrame,model_type:str='predictive'):
         if self.model_averaging_weights is None:
             self.setModelAveragingWeights()
         results = {}
-        wtd_yhats={scorer:np.zeros(x_df.shape[0]) for scorer in self.scorer_list}
-        for name, est in self.prediction_models.items():
-            results[name] = est.predict(x_df)
-            
-            for scorer,weights in self.model_averaging_weights[name].items():
-                
+        
+        if model_type=='cross_validation':
+            wtd_yhats=[{scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list} for _ in self.cv_count]
+        else:
+            wtd_yhats={scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list}
+        for name, est in self.predictive_models.items():
+            if model_type=='predictive':
+                results[name] = est.predict(X_df_predict)
+                for scorer,weights in self.model_averaging_weights[name].items():
                     wtd_yhats[scorer] += weights * results[name]
+            elif model_type=='cross_validation':
+                results[name]=[]
+                for cv_i in range(self.cv_count):
+                    model_cv_i=self.cv_results[name]['estimator'][cv_i]
+                    results[name].append(model_cv_i.predict(X_df_predict))
+                    for scorer,weights in self.model_averaging_weights[name].items():
+                        wtd_yhats[cv_i][scorer] += weights * results[name][cv_i]
         results["weights"] = self.model_averaging_weights
         results["prediction"] = wtd_yhats
         #results["final-test-predictions"] = self.get_test_predictions()
@@ -378,7 +388,7 @@ class VBHelper(myLogger):
         test_results = {}
         if self.X_test is None:
             return test_results
-        for name, est in self.prediction_models.items():
+        for name, est in self.predictive_models.items():
             r = {
                 "y": self.y_test.to_list(),
                 "yhat": est.predict(self.X_test)

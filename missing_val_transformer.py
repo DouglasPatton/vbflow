@@ -79,21 +79,9 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                     pass
         self.logger.info(f'x_nan_count:{x_nan_count}, y_nan_count:{y_nan_count}')
         
-        
-        
-        return self
-    
-    def get_feature_names(self,input_features=None):
-        #obj_feat=[input_features[i]for i in self.obj_idx_]
-        #float_feat=[input_features[i]for i in self.float_idx_]
-        return featureNameExtractor(self.T,input_features=input_features)
-    
-    def transform(self,X,y=None):
-        if type(X)!=pd.DataFrame:
-            X=pd.DataFrame(X)
-        
+        ###########
         cat_encoder=OneHotEncoder(categories=self.cat_list_,sparse=False,) # drop='first'
-        xvars=list(X.columns)
+        
         if type(self.strategy) is str:
             if self.strategy=='drop':
                 assert False, 'develop drop columns with >X% missing vals then drop rows with missing vals'
@@ -121,9 +109,25 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
         
         Tlist=[numeric_T,categorical_T]    
-        self.T=ColumnTransformer(transformers=Tlist)
-        self.T.fit(X,y)
-        X=self.T.transform(X)
+        self.T_=ColumnTransformer(transformers=Tlist)
+        self.T_.fit(X,y)
+        
+        return self
+    
+    def get_feature_names(self,input_features=None):
+        #obj_feat=[input_features[i]for i in self.obj_idx_]
+        #float_feat=[input_features[i]for i in self.float_idx_]
+        return featureNameExtractor(self.T_,input_features=input_features)
+    
+    
+    
+    def transform(self,X,y=None):
+        if type(X)!=pd.DataFrame:
+            X=pd.DataFrame(X)
+        if self.strategy=='drop_row':
+            X=X.dropna(axis=0)    
+        
+        X=self.T_.transform(X)
             
         
         x_nan_count=np.isnan(X).sum() # sums by column and then across columns
