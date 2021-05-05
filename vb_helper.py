@@ -41,7 +41,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4):
+    def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -52,7 +52,7 @@ class VBHelper(myLogger):
         #below attributes moved to self.project_cv_dict
         #self.cv_folds=cv_folds
         #self.cv_reps=cv_reps
-        #self.cv_count=cv_reps*cv_folds
+        #self.project_CV_dict['cv_count']=cv_reps*cv_folds
         #self.cv_strategy=cv_strategy
         #self.cv_groupcount=cv_groupcount
         
@@ -364,7 +364,7 @@ class VBHelper(myLogger):
         results = {}
         
         if model_type=='cross_validation':
-            wtd_yhats=[{scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list} for _ in self.cv_count]
+            wtd_yhats=[{scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list} for _ in range(self.project_CV_dict['cv_count'])]
         else:
             wtd_yhats={scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list}
         for name, est in self.predictive_models.items():
@@ -374,7 +374,7 @@ class VBHelper(myLogger):
                     wtd_yhats[scorer] += weights * results[name]
             elif model_type=='cross_validation':
                 results[name]=[]
-                for cv_i in range(self.cv_count):
+                for cv_i in range(self.project_CV_dict['cv_count']):
                     model_cv_i=self.cv_results[name]['estimator'][cv_i]
                     results[name].append(model_cv_i.predict(X_df_predict))
                     for scorer,weights in self.model_averaging_weights[name].items():
