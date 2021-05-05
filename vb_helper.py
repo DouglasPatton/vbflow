@@ -131,6 +131,8 @@ class VBHelper(myLogger):
         n_jobs=self.cv_n_jobs
         cv_results={};new_cv_results={}
         jhash=joblib.hash([self.X_df,self.y_df,self.pipe_dict,self.project_CV_dict]) #unique identifier
+        if try_load:
+            print("jhash: ",jhash)
         #jhash2=joblib.hash([self.X_df,self.y_df,self.pipe_dict]) 
         #print('jhash',jhash)
         #print('jhash2',jhash2)
@@ -364,7 +366,7 @@ class VBHelper(myLogger):
         for name, est in self.prediction_models.items():
             results[name] = est.predict(x_df)
             
-            for scorer,weights in self.model_averaging_weights[name].items()
+            for scorer,weights in self.model_averaging_weights[name].items():
                 
                     wtd_yhats[scorer] += weights * results[name]
         results["weights"] = self.model_averaging_weights
