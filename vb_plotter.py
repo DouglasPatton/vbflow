@@ -50,7 +50,7 @@ class VBPlotter(myLogger):
         self.cv_yhat_dict=cv_yhat_dict
         self.cv_score_dict={key:[np.array(v) for v in val] for key,val in data_dict['cv_score'].items()}
         yhat_stack_dict=self.stackCVYhat()
-        self.yhat_stack_dict=yhat_stack_dict
+        self.yhat_stack_dict=yhat_stack_dict #stack reps into a single column
         self.y=y
         self.cv_score_dict=data_dict['cv_score']
         self.setScoreDict()
@@ -59,7 +59,7 @@ class VBPlotter(myLogger):
         
 
 
-    def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False):
+    def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=None,cv_ypredict=None,estimators='all'):
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
@@ -70,6 +70,8 @@ class VBPlotter(myLogger):
         #ax.set_ylabel(scorer)
         #ax.set_title(scorer)
         n=y.shape[0]
+        ymin=y.min()
+        ymax=y.max()
         #y_sort_idx=np.argsort(y) #other orderings could be added
         #y_sort_idx_stack=np.concatenate([y_sort_idx for _ in range(self.cv_reps)],axis=0)
         y_stack=np.concatenate([y for _ in range(self.cv_reps)],axis=0)
@@ -78,8 +80,12 @@ class VBPlotter(myLogger):
         if single_plot:
             ax=fig.add_subplot(111)
             ax.scatter(y,y,s=20,alpha=0.4,label='y',zorder=0,color='k')
+            ax.set_xlabel('observed Y')
+            ax.set_ylabel('predicted Y')
         #for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
         for e,(est_name,yhat_stack) in enumerate(self.yhat_stack_dict.items()):
+            if not estimators=='all':
+                if not est_name in estimators:continue
             if not single_plot:
                 ax=fig.add_subplot(est_count,1,e+1)
                 ax.scatter(y,y,s=20,alpha=0.6,label='y',zorder=0,color='k')
@@ -92,6 +98,11 @@ class VBPlotter(myLogger):
                 y,yhat_stack.reshape(self.cv_reps,n).mean(axis=0),
                 s=20,marker='*',color=colors[e],alpha=0.7,label=f'mean_cv_yhat_{est_name}',zorder=2)
             #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=estimator_name+' cv score='+str(np.mean(cv_score_dict[estimator_name][scorer])))
+            if not ypredict is None:
+                assert type(ypredict) is dict,f'expecting dict for ypredict, got: {type(ypredict)}'
+                yhat_est=ypredict[est_name]
+                ax.hlines(yhat_est,ymin,ymax)
+                
             ax.grid(True)
         #ax.xaxis.set_ticks([])
         #ax.xaxis.set_visible(False)
