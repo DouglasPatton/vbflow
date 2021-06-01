@@ -7,11 +7,11 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.pipeline import make_pipeline,FeatureUnion
+from sklearn.pipeline import make_pipeline,FeatureUnion,Pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 
 
-from vb_transformers import none_T,featureNameExtractor
+from vb_transformers import none_T#,featureNameExtractor
 #,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
 #from vb_helper import myLogger
 
@@ -55,7 +55,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         else:self.cat_idx=None
             
         
-    def fit(self,X,y):
+    def fit(self,X,y=None):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
         if self.cat_idx is None:
@@ -76,6 +76,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                     y_nan_count='error'
                     self.logger.exception(f'error summing nulls for y, type(y):{type(y)}')
                 else:
+                    y_nan_count='n/a'
                     pass
         self.logger.info(f'x_nan_count:{x_nan_count}, y_nan_count:{y_nan_count}')
         
@@ -88,12 +89,12 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 
             if self.strategy=='pass-through':
                 numeric_T=('no_transform',none_T(),self.float_idx_)
-                categorical_T=('cat_drop_hot',cat_encoder,self.obj_idx_)
+                categorical_T=('cat_onehot',cat_encoder,self.obj_idx_)
             if self.strategy=='drop_row':
                 X=X.dropna(axis=0) # overwrite it
                 
                 numeric_T=('no_transform',none_T(),self.float_idx_)
-                categorical_T=('cat_drop_hot',cat_encoder,self.obj_idx_)
+                categorical_T=('cat_onehot',cat_encoder,self.obj_idx_)
                 
             if self.strategy=='impute_middle':
                 numeric_T=('num_imputer', SimpleImputer(strategy='mean'),self.float_idx_)
@@ -110,14 +111,21 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         
         Tlist=[numeric_T,categorical_T]    
         self.T_=ColumnTransformer(transformers=Tlist)
-        self.T_.fit(X,y)
+        self.T_=self.T_.fit(X,y)
         
         return self
     
     def get_feature_names(self,input_features=None):
-        #obj_feat=[input_features[i]for i in self.obj_idx_]
-        #float_feat=[input_features[i]for i in self.float_idx_]
-        return featureNameExtractor(self.T_,input_features=input_features)
+        cat_feat=[input_features[i]for i in self.obj_idx_]
+        float_feat=[input_features[i]for i in self.float_idx_]
+        output_features=float_feat
+        cat_T=self.T_.transformers_[1][1]
+        if type(cat_T) is Pipeline:
+            output_features.extend(cat_T['onehotencoder'].get_feature_names(cat_feat))
+        else:
+            output_features.extend(cat_T.get_feature_names(cat_feat))
+        return output_features
+        #return featureNameExtractor(self.T_,input_features=input_features).run()
     
     
     

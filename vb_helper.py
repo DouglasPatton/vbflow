@@ -13,9 +13,13 @@ from sklearn.model_selection import cross_validate, train_test_split, RepeatedKF
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 from vb_estimators import MultiPipe,FCombo,NullModel
+from missing_val_transformer import missingValHandler
 from vb_plotter import VBPlotter
 import json,pickle
 import joblib
+
+from scipy.stats import spearmanr
+from scipy.cluster import hierarchy
 
 #import sys
 #sys.path.append(os.path.abspath('..'))#sys.path[0] + '/..') 
@@ -101,6 +105,44 @@ class VBHelper(myLogger):
         self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
 
+        
+    def summarize(self):
+        self.hierarchicalDendogram()
+    
+    
+    def hierarchicalDendogram(self):
+        #from https://scikit-learn.org/dev/auto_examples/inspection/plot_permutation_importance_multicollinear.html#sphx-glr-auto-examples-inspection-plot-permutation-importance-multicollinear-py
+        try: self.X_float_df
+        except:self.floatifyX()
+        X=self.X_float_df#.to_numpy()
+        plt.rcParams['font.size'] = '8'
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8),dpi=200)
+        corr = spearmanr(X,nan_policy='omit').correlation
+        corr_linkage = hierarchy.ward(corr)
+        dendro = hierarchy.dendrogram(
+            corr_linkage, labels=X.columns.tolist(), ax=ax1, leaf_rotation=90
+        )
+        dendro_idx = np.arange(0, len(dendro['ivl']))
+
+        ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']])
+        ax2.set_xticks(dendro_idx)
+        ax2.set_yticks(dendro_idx)
+        ax2.set_xticklabels(dendro['ivl'], rotation='vertical',fontsize=6)
+        ax2.set_yticklabels(dendro['ivl'],fontsize=6)
+        fig.tight_layout()
+        plt.show()
+        
+    def floatifyX(self):
+        mvh=missingValHandler({
+            'impute_strategy':'impute_knn5'#'pass-through'
+        })
+        mvh=mvh.fit(self.X_df)
+        X_float=mvh.transform(self.X_df)
+        X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
+        self.X_float_df=X_float_df
+        self.mvh=mvh
+        #return X_float_df
+        
     
     def setPipeDict(self,pipe_dict):
         if self.run_stacked:

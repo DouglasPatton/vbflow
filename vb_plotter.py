@@ -23,6 +23,8 @@ class myLogger:
             datefmt='%Y-%m-%dT%H:%M:%S')
         self.logger = logging.getLogger(handlername)
 
+        
+        
 class VBPlotter(myLogger):
     def __init__(self):
         myLogger.__init__(self)
@@ -60,6 +62,7 @@ class VBPlotter(myLogger):
 
 
     def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=None,cv_ypredict=None,estimators='all'):
+        #true y on horizontal axis, yhat on vertical axis
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
@@ -70,8 +73,8 @@ class VBPlotter(myLogger):
         #ax.set_ylabel(scorer)
         #ax.set_title(scorer)
         n=y.shape[0]
-        ymin=y.min()
-        ymax=y.max()
+        #ymin=y.min()
+        #ymax=y.max()
         #y_sort_idx=np.argsort(y) #other orderings could be added
         #y_sort_idx_stack=np.concatenate([y_sort_idx for _ in range(self.cv_reps)],axis=0)
         y_stack=np.concatenate([y for _ in range(self.cv_reps)],axis=0)
@@ -101,6 +104,9 @@ class VBPlotter(myLogger):
             if not ypredict is None:
                 assert type(ypredict) is dict,f'expecting dict for ypredict, got: {type(ypredict)}'
                 yhat_est=ypredict[est_name]
+                all_y=np.concatenate(y,yhat_stack,axis=0)
+                ymin=all_y.min()
+                ymax=all_y.max()
                 ax.hlines(yhat_est,ymin,ymax)
                 
             ax.grid(True)
@@ -112,6 +118,9 @@ class VBPlotter(myLogger):
         fig.show()
     
     def stackCVYhat(self):
+        #makes a single column of all yhats across cv iterations for graphing
+        #returns a dictionary with model/estimator/pipeline name as the key
+
         y=self.y
         yhat_stack_dict={}
         for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):

@@ -30,7 +30,7 @@ class featureNameExtractor:
         self.input_features=input_features
         self.feature_names=[]
 
-    def run():
+    def run(self):
 
         # Allow transformers to be pipelines. Pipeline steps are named differently, so preprocessing is needed
         if type(self.column_transformer) == Pipeline:
@@ -40,38 +40,39 @@ class featureNameExtractor:
             l_transformers = list(self.column_transformer._iter(fitted=True))
 
 
-        for name, trans, column, _ in l_transformers: 
+        for name, trans, columns, _ in l_transformers:
+            print(f'name:{name},columns:{columns}')
             if type(trans) == Pipeline:
                 # Recursive call on pipeline
                 _names = featureNameExtractor(trans,input_features=self.input_features).run()
                 # if pipeline has no transformer that returns names
                 if len(_names)==0:
-                    _names = [name + "__" + f for f in column]
+                    _names = [name + "__" + f for f in columns]
                 self.feature_names.extend(_names)
             else:
-                self.feature_names.extend(get_names(trans))
+                self.feature_names.extend(self.get_names(name,trans,columns))
 
         return self.feature_names
         
-    def get_names(trans):
+    def get_names(self,name,trans,columns):
         # >> Original get_feature_names() method
         if trans == 'drop' or (
-                hasattr(column, '__len__') and not len(column)):
+                hasattr(columns, '__len__') and not len(columns)):
             return []
         if trans == 'passthrough':
             if hasattr(column_transformer, '_df_columns'):
-                if ((not isinstance(column, slice))
-                        and all(isinstance(col, str) for col in column)):
-                    return column
+                if ((not isinstance(columns, slice))
+                        and all(isinstance(col, str) for col in columns)):
+                    return columns
                 else:
-                    return column_transformer._df_columns[column]
+                    return column_transformer._df_columns[columns]
             else:
                 indices = np.arange(column_transformer._n_features)
                 return ['x%d' % i for i in indices[column]]
         if not hasattr(trans, 'get_feature_names'):
         # >>> Change: Return input column names if no method avaiable
             # Turn error into a warning
-            warnings.warn("Transformer %s (type %s) does not "
+            print("Transformer %s (type %s) does not "
                                  "provide get_feature_names. "
                                  "Will return input column names if available"
                                  % (str(name), type(trans).__name__))
@@ -80,9 +81,9 @@ class featureNameExtractor:
             if column is None:
                 return []
             else:
-                return [name + "__" + f for f in column]
+                return [f"{name}__{f}" for f in column]
 
-        return [name + "__" + f for f in trans.get_feature_names()]
+        return [f"{name}__{f}" for f in trans.get_feature_names(input_features=self.input_features)]
     
     ### Start of processing
     
@@ -287,6 +288,10 @@ class none_T(BaseEstimator,TransformerMixin):
     def __init__(self):
         pass
     def fit(self,X,y=None):
+        """if type(X) is pd.DataFrame():
+            self.columns_=X.columns.to_list()
+        else:
+            self.columns_=list(range(X.shape(1))"""
         self.k_=X.shape[1]
         return self
     def transform(self,X):
@@ -294,7 +299,7 @@ class none_T(BaseEstimator,TransformerMixin):
     def inverse_transform(self,X):
         return X  
     
-    def get_feature_name(self,input_features=None):
+    def get_feature_names(self,input_features=None):
         if input_features is None:
-            input_features=[f'var_{i}' for i in range(len(self.k_))]
+            input_features=[f'var_{i}' for i in range(self.k_)]
         return input_features
