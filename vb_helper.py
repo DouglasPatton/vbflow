@@ -45,7 +45,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,test_share=0.2,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8):
+    def __init__(self,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -114,13 +114,44 @@ class VBHelper(myLogger):
         X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
         X_json_s=X_float_df.to_json()# _json_s is json-string
         y_json_s=self.y_df.to_json()
-        summary_data={'full_float_x':json.loads(X_json_s),'full_y':json.loads(y_json_s)} #loads is for json-strings
+        summary_data={'full_float_x':X_json_s,'full_y':y_json_s} 
         with open('summaryXy.json','w') as f:
             json.dump(summary_data,f)
-        #self.X_float_df=X_float_df
+        self.X_float_df=X_float_df
         #self.mvh=mvh
         #return X_float_df    
+    def summarize(self):
+        self.hierarchicalDendogram()
     
+    
+    def hierarchicalDendogram(self,linkage='ward',dist='spearmanr'):
+        #from https://scikit-learn.org/dev/auto_examples/inspection/plot_permutation_importance_multicollinear.html#sphx-glr-auto-examples-inspection-plot-permutation-importance-multicollinear-py
+        try: self.X_float_df
+        except:self.floatifyX()
+        X=self.X_float_df#.to_numpy()
+        #X=(X-X.mean())/X.std()
+        plt.rcParams['font.size'] = '8'
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8),dpi=200)
+        if dist=='spearmanr':
+            corr = spearmanr(X,nan_policy='omit').correlation
+        else: assert False, 'distance not developed'
+        if linkage=='ward':
+            corr_linkage = hierarchy.ward(corr)
+        else: assert False, 'linkage not developed'
+        self.corr_linkage=corr_linkage
+        self.corr=corr
+        dendro = hierarchy.dendrogram(
+            corr_linkage, labels=X.columns.tolist(), ax=ax1, leaf_rotation=90
+        )
+        dendro_idx = np.arange(0, len(dendro['ivl']))
+
+        ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']])
+        ax2.set_xticks(dendro_idx)
+        ax2.set_yticks(dendro_idx)
+        ax2.set_xticklabels(dendro['ivl'], rotation='vertical',fontsize=6)
+        ax2.set_yticklabels(dendro['ivl'],fontsize=6)
+        fig.tight_layout()
+        plt.show()
         
     
     def setPipeDict(self,pipe_dict):
