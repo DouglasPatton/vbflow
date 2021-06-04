@@ -218,7 +218,7 @@ class VBHelper(myLogger):
                                 new_results[est_n]=[]
                             new_results[est_n].append(m)
                             lil_x=self.X_df.iloc[0:2]
-                            print(f'est_n yhat test: {m.predict(lil_x)}')
+                            #print(f'est_n yhat test: {m.predict(lil_x)}')
                     for est_n in new_results:
                         if est_n in cv_results:
                             est_n+='_fcombo'
