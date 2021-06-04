@@ -18,7 +18,7 @@ class VBSummary(myLogger):
         self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
         
-    def kernelDensity(self):
+    def kernelDensityPie(self):
         all_vars=self.full_X_float_df.columns.to_list()
         float_vars=[name for name in all_vars if not re.search('__',name)]
         cat_vars=[name for name in all_vars if not name in float_vars]

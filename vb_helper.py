@@ -45,7 +45,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8,shuffle=True):
+    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=15,shuffle=True):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -202,7 +202,7 @@ class VBHelper(myLogger):
         for pipe_name,model in self.model_dict.items():
             start=time()
             model_i=cross_validate(
-                model, self.X_df, self.y_df, return_estimator=True, 
+                model, self.X_df, self.y_df.iloc[:,0], return_estimator=True, 
                 scoring=self.scorer_list, cv=self.getCV(), n_jobs=n_jobs)
             end=time()
             print(f"{pipe_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
@@ -249,7 +249,7 @@ class VBHelper(myLogger):
         cv_folds=self.project_CV_dict['cv_folds']
         train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df)))
         n,k=self.X_df.shape
-        y=self.y_df.to_numpy()
+        y=self.y_df.to_numpy()[:,0]
         data_idx=np.arange(n)
         yhat_dict={};err_dict={};cv_y_yhat_dict={}
         for idx,(pipe_name,result) in enumerate(self.cv_results.items()):
@@ -266,7 +266,7 @@ class VBHelper(myLogger):
                     yhat_arr=cv_est.predict(self.X_df.iloc[test_rows])
                     yhat[test_rows]=yhat_arr
                     err[test_rows]=y[test_rows]-yhat[test_rows]
-                    cv_y_yhat_dict[pipe_name].append((self.y_df.iloc[test_rows].to_numpy(),yhat_arr))
+                    cv_y_yhat_dict[pipe_name].append((self.y_df.iloc[test_rows,0].to_numpy(),yhat_arr))
                 yhat_dict[pipe_name].append(yhat)
                 err_dict[pipe_name].append(err)
                 
@@ -279,7 +279,7 @@ class VBHelper(myLogger):
     def jsonifyProjectCVResults(self):
         full_results=self.arrayDictToListDict(
             {
-                'y':self.y_df.to_list(),
+                'y':self.y_df.iloc[:,0].to_list(),
                 'cv_yhat':self.cv_yhat_dict,
                 'cv_score':self.cv_score_dict,
                 'project_cv':self.project_CV_dict,
@@ -317,7 +317,7 @@ class VBHelper(myLogger):
         scorer_list=self.scorer_list
         cv_score_dict={}
         cv_score_dict_means={}
-        y=self.y_df
+        y=self.y_df.iloc[:,0]
         for idx,(pipe_name,result) in enumerate(cv_results.items()):
             #cv_estimators=result['estimator']
             model_idx_scoredict={}
@@ -356,7 +356,7 @@ class VBHelper(myLogger):
             predictive_models[name] = self.model_dict[name]#copy.copy(self.cv_results[name]["estimator"][indx])
         self.logger.info(f"Models:{predictive_models}")
         for name, est in predictive_models.items():
-            predictive_models[name] = est.fit(X_df, y_df)
+            predictive_models[name] = est.fit(X_df, y_df.iloc[:,0])
         self.predictive_models = predictive_models
         self.logger.info("Refitting model for prediction complete.")
 
