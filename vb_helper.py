@@ -45,7 +45,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8):
+    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -53,6 +53,7 @@ class VBHelper(myLogger):
         self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
         self.test_share=test_share
         self.rs=random_state
+        self.drop_duplicates=drop_duplicates
         #below attributes moved to self.project_cv_dict
         #self.cv_folds=cv_folds
         #self.cv_reps=cv_reps
@@ -96,6 +97,9 @@ class VBHelper(myLogger):
     
     
     def setData(self,X_df,y_df):
+        
+        X_df,y_df=self.checkData(X_df,y_df)
+        
         if self.test_share>0:
             self.X_df,self.X_test,self.y_df,self.y_test=train_test_split(
                 X_df, y_df,test_size=self.test_share,random_state=self.rs)
@@ -105,6 +109,32 @@ class VBHelper(myLogger):
         self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
 
+    def checkData(self,X_df,y_df):
+        data_df=X_df.copy()
+        data_df.loc['dependent_variable',:]=y_df
+        X_duplicates=X_df.duplicated()
+        full_duplicates=data_df.duplicated()
+        full_dup_sum=full_duplicates.sum()
+        X_dup_sum=X_duplicates.sum()
+        print(f'# of duplicate rows of data: {full_dup_sum}')
+        print(f'# of duplicate rows of X: {X_dup_sum}')
+        
+        if self.drop_duplicates:
+            if self.drop_duplicates=='full':
+                X_df=X_df[~full_duplicates]
+                print(f'# of full_duplicates dropped: {full_dup_sum}')
+            elif self.drop_duplicates=='X':
+                X_df=X_df[~X_duplicates]
+                print(f'# of X_duplicates dropped: {X_dup_sum}')
+            else:
+                assert False,'unexpected drop_duplicates:{self.drop_duplicates}'
+            
+            
+        return X_df,y_df
+        
+        
+        
+        
     def saveFullFloatXy(self):
         mvh=missingValHandler({
             'impute_strategy':'impute_knn5'#'pass-through'

@@ -121,7 +121,16 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         output_features=float_feat
         cat_T=self.T_.transformers_[1][1]
         if type(cat_T) is Pipeline:
-            output_features.extend(cat_T['onehotencoder'].get_feature_names(cat_feat))
+            num_cat_feat=cat_T['onehotencoder'].get_feature_names(cat_feat)
+            num_cat_feat__=[]
+            for name in num_cat_feat:
+                for c_idx_l,char in enumerate(name[::-1]):
+                    c_idx=len(name)-c_idx_l
+                    if char=='_':
+                        num_cat_feat__.append(name[:c_idx]+'_'+name[c_idx:])
+                        break
+                        
+            output_features.extend(num_cat_feat__)
         else:
             output_features.extend(cat_T.get_feature_names(cat_feat))
         return output_features
