@@ -97,7 +97,7 @@ class VBHelper(myLogger):
     
     
     def setData(self,X_df,y_df):
-        
+        self.dep_var_name=y_df.columns.to_list()[0]
         X_df,y_df=self.checkData(X_df,y_df)
         
         if self.test_share>0:
@@ -111,7 +111,7 @@ class VBHelper(myLogger):
 
     def checkData(self,X_df,y_df):
         data_df=X_df.copy()
-        data_df.loc['dependent_variable',:]=y_df
+        data_df.loc['dependent_variable',:]=y_df.loc[:,self.dep_var_name]
         X_duplicates=X_df.duplicated()
         full_duplicates=data_df.duplicated()
         full_dup_sum=full_duplicates.sum()

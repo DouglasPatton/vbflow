@@ -15,7 +15,7 @@ class VBSummary(myLogger):
     def setData(self,df_dict):
         #data looks like: summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
         self.full_X_float_df=pd.read_json(df_dict['full_float_X'])
-        self.full_y_df=pd.read_json(df_dict['full_y'],typ='series')
+        self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
         
     def kernelDensity(self):
@@ -25,7 +25,7 @@ class VBSummary(myLogger):
         cat_var_dict=self.mergeCatVars(cat_vars)
         cat_group_names=list(cat_var_dict.keys())
         float_var_count=len(float_vars)
-        total_var_count=float_var_count+len(cat_var_dict)
+        total_var_count=float_var_count+len(cat_var_dict)+1 #dep var too
         
         plot_cols=int(total_var_count**0.5)
         plot_rows=-(-total_var_count//plot_cols) #ceiling divide
@@ -35,12 +35,15 @@ class VBSummary(myLogger):
         
         
         for ax_idx,ax in enumerate(axes_list):
-            if ax_idx<float_var_count:
-                name=float_vars[ax_idx]
-                self.full_X_float_df.loc[:,[name]].plot.density(ax=ax)
-                ax.legend(loc=9)
+            if ax_idx<float_var_count+1:
+                if ax_idx==0:
+                    self.full_y_df.plot.density(ax=ax,c='r')
+                else:
+                    name=float_vars[ax_idx-1]
+                    self.full_X_float_df.loc[:,[name]].plot.density(ax=ax)
+                    ax.legend(loc=9)
             elif ax_idx<total_var_count:
-                cat_idx=ax_idx-float_var_count
+                cat_idx=ax_idx-float_var_count-1
                 cat_name=cat_group_names[cat_idx]
                 cat_flavors,var_names=zip(*cat_var_dict[cat_name])
                 cat_df=self.full_X_float_df.loc[:,var_names]
