@@ -131,7 +131,7 @@ class VBSummary(myLogger):
         )
         dendro_idx = np.arange(0, len(dendro['ivl']))
 
-        ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']],aspect='auto',interpolation='none')
+        ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']],aspect='equal',interpolation='none')
         ax2.set_xticks(dendro_idx)
         ax2.set_yticks(dendro_idx)
         ax2.set_xticklabels(dendro['ivl'], rotation='vertical',fontsize=6)
