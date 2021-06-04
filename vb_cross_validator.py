@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.model_selection import RepeatedStratifiedKFold, cross_validate
 from sklearn.preprocessing import KBinsDiscretizer
+import pandas as pd
 
 class regressor_q_stratified_cv:
     def __init__(self,n_splits=10,n_repeats=2,groupcount=10,random_state=0,strategy='quantile'):
@@ -12,10 +13,17 @@ class regressor_q_stratified_cv:
             
     def split(self,X,y,groups=None):
         #kgroups=self.discretizer.fit_transform(y[:,None])[:,0]
-        ysort_order=np.argsort(y)
-        y1=np.ones(y.shape)
+        if len(y.shape)>1:
+            if type(y) is pd.DataFrame:
+                y_vec=y.to_numpy()[:,0]
+            else:
+                y_vec=y[:,0]
+        else:
+            y_vec=y
+        ysort_order=np.argsort(y_vec)
+        y1=np.ones(y_vec.shape)
         y1split=np.array_split(y1,self.groupcount)
-        kgroups=np.empty(y.shape)
+        kgroups=np.empty(y_vec.shape)
         kgroups[ysort_order]=np.concatenate([y1split[i]*i for i in range(self.groupcount)],axis=0)
         return self.cv.split(X,kgroups)
     

@@ -45,7 +45,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8):
+    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8,shuffle=True):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -54,13 +54,7 @@ class VBHelper(myLogger):
         self.test_share=test_share
         self.rs=random_state
         self.drop_duplicates=drop_duplicates
-        #below attributes moved to self.project_cv_dict
-        #self.cv_folds=cv_folds
-        #self.cv_reps=cv_reps
-        #self.project_CV_dict['cv_count']=cv_reps*cv_folds
-        #self.cv_strategy=cv_strategy
-        #self.cv_groupcount=cv_groupcount
-        
+        self.shuffle=shuffle
         
         # below are added in the notebook
         self.scorer_list=None
@@ -70,8 +64,6 @@ class VBHelper(myLogger):
         ##
         self.prediction_model_type= "average"
         self.model_averaging_weights=None
-        #self.logger=logging.getLogger()
-        #super().__init__() #instantiates parents (e.g., VBPlotter)
         self.plotter=VBPlotter()
     
     
@@ -99,6 +91,14 @@ class VBHelper(myLogger):
     def setData(self,X_df,y_df):
         self.dep_var_name=y_df.columns.to_list()[0]
         X_df,y_df=self.checkData(X_df,y_df)
+        self.X_df_start_order=X_df
+        self.y_df_start_order=y_df
+        shuf=np.arange(y_df.shape[0])
+        seed=self.rs
+        rng = np.random.default_rng(seed)
+        rng.shuffle(shuf)
+        X_df=X_df.iloc[shuf]
+        y_df=y_df.iloc[shuf]
         
         if self.test_share>0:
             self.X_df,self.X_test,self.y_df,self.y_test=train_test_split(
@@ -139,12 +139,12 @@ class VBHelper(myLogger):
         mvh=missingValHandler({
             'impute_strategy':'impute_knn5'#'pass-through'
         })
-        mvh=mvh.fit(self.X_df)
-        X_float=mvh.transform(self.X_df)
-        X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
+        mvh=mvh.fit(self.X_df_start_order)
+        X_float=mvh.transform(self.X_df_start_order)
+        X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df_start_order.columns.to_list()))
         X_json_s=X_float_df.to_json()# _json_s is json-string
-        y_json_s=self.y_df.to_json()
-        X_nan_bool_s=self.X_df.isnull().to_json()
+        y_json_s=self.y_df_start_order.to_json()
+        X_nan_bool_s=self.X_df_start_order.isnull().to_json()
         
         summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
         with open('summaryXy.json','w') as f:
@@ -181,7 +181,7 @@ class VBHelper(myLogger):
         if not os.path.exists('stash'):
             os.mkdir('stash')
         
-        
+       
         #expand_multipipes kwarg replaced with self.run_stacked
         n_jobs=self.cv_n_jobs
         cv_results={};new_cv_results={}
@@ -195,7 +195,9 @@ class VBHelper(myLogger):
         if try_load and os.path.exists(fname):
             with open(fname,'rb') as f:
                 self.cv_results=pickle.load(f)
+            print('existing cv_results loaded')
             return
+            
         
         for pipe_name,model in self.model_dict.items():
             start=time()
