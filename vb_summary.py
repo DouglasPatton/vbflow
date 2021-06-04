@@ -41,7 +41,7 @@ class VBSummary(myLogger):
                 else:
                     name=float_vars[ax_idx-1]
                     self.full_X_float_df.loc[:,[name]].plot.density(ax=ax)
-                    ax.legend(loc=9)
+                ax.legend(loc=1,bbox_to_anchor=(1,1.2),fontsize='x-small')
             elif ax_idx<total_var_count:
                 cat_idx=ax_idx-float_var_count-1
                 cat_name=cat_group_names[cat_idx]
@@ -51,7 +51,8 @@ class VBSummary(myLogger):
                 cat_shares=cat_df.sum()
                 cat_shares.name=cat_name
                 self.cat_shares=cat_shares
-                cat_shares.plot(y=cat_name,ax=ax,kind='pie')
+                cat_shares.plot(y=cat_name,ax=ax,kind='pie',fontsize='x-small')
+                #ax.legend(fontsize='x-small')
             else:
                 ax.axis('off')
         fig.tight_layout()
