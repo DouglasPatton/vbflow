@@ -347,7 +347,7 @@ class VBHelper(myLogger):
     def refitPredictiveModels(self, selected_models: list,  verbose: bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
-        y_df=self.y_df
+        y_df=self.y_df #changed to 1 dim below
         X_df=self.X_df
         self.logger.info("Refitting specified models for prediction...")
         predictive_models = {}
