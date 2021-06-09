@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from scipy.stats import spearmanr,pearsonr
 from scipy.cluster import hierarchy
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+#from sklearn.pipeline import make_pipeline
 import re
 
 class VBSummary(myLogger):
@@ -17,6 +20,50 @@ class VBSummary(myLogger):
         self.full_X_float_df=pd.read_json(df_dict['full_float_X'])
         self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
+        
+    def viewComponents(self,num_cols=[6,9]):
+        n=self.full_X_float_df.shape[0]
+        k=self.full_X_float_df.shape[1]
+        g=len(num_cols)
+        fig=plt.figure(figsize=(6*g,12),dpi=200)
+        cmap='cool'
+        X=self.full_X_float_df
+        for g_idx,col_count in enumerate(num_cols):
+            ax=fig.add_subplot(g,1,g_idx+1,projection='3d')
+            keep_cols=self.getTopNCols(col_count)
+            X_scaled_expanded=StandardScaler().fit_transform(PolynomialFeatures(include_bias=False,degree=1).fit_transform(X.loc[(slice(None),keep_cols)]))
+            X_orthog=PCA(n_components=3).fit_transform(X_scaled_expanded)
+            self.X_orthog=X_orthog
+            
+            sc=ax.scatter(*X_orthog.T,c=self.full_y_df.to_numpy(),cmap=cmap,s=4,marker='o',depthshade=False,alpha=0.7)
+            ax.set_title(f'PCA projection of top {col_count} columns')
+            clb=fig.colorbar(sc,shrink=0.5)
+            clb.ax.set_title('y')
+            ax.set_xlabel('component 1')
+            ax.set_ylabel('component 2')
+            ax.set_zlabel('component 3')
+        
+                
+                
+    def getTopNCols(self,n_cols):        
+        
+        try: self.spear_xy,self.r_list
+        except:
+            self.spear_xy=[];self.r_list=[]
+        
+            for col in self.full_X_float_df.columns:
+                r=spearmanr(self.full_y_df,self.full_X_float_df[col]).correlation
+                self.spear_xy.append((r,col))
+                self.r_list.append(r)
+        r_arr=np.array(self.r_list)
+        #r_min=r_arr.mean()+r_arr.std()
+        r_min=np.sort(r_arr)[-n_cols]
+        keep_cols=[]
+        for r,col in self.spear_xy:
+            if r>=r_min:
+                keep_cols.append(col)
+        return keep_cols
+        
         
     def kernelDensityPie(self):
         all_vars=self.full_X_float_df.columns.to_list()
@@ -37,10 +84,10 @@ class VBSummary(myLogger):
         for ax_idx,ax in enumerate(axes_list):
             if ax_idx<float_var_count+1:
                 if ax_idx==0:
-                    self.full_y_df.plot.density(ax=ax,c='r')
+                    self.full_y_df.plot.density(ax=ax,c='r',ind=200)
                 else:
                     name=float_vars[ax_idx-1]
-                    self.full_X_float_df.loc[:,[name]].plot.density(ax=ax)
+                    self.full_X_float_df.loc[:,[name]].plot.density(ax=ax,c='b',ind=200)
                 ax.legend(loc=1,bbox_to_anchor=(1,1.2),fontsize='x-small')
             elif ax_idx<total_var_count:
                 cat_idx=ax_idx-float_var_count-1
@@ -72,11 +119,27 @@ class VBSummary(myLogger):
         
         
     def missingVals(self):
-        nan_01=self.X_nan_bool_df.to_numpy().astype(np.int8)
+        n=self.X_nan_bool_df.shape[0]
+        nan_01=self.X_nan_bool_df.to_numpy().astype(np.int16)
         feature_names=self.X_nan_bool_df.columns.to_list()
         feature_idx=np.arange(len(feature_names))
         #nan_bool_stack=self.X_nan_bool_df.reset_index(drop=True,inplace=False).to_numpy().astype(np.uint8)
-        has_nan_features=nan_01.std(axis=0)>0
+        
+        plt.rcParams['font.size'] = '8'
+        fig, (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, figsize=(12, 16),dpi=200)
+        feat_miss_count_ser=self.X_nan_bool_df.astype(np.int16).sum(axis=0)
+        feat_miss_count_ser.plot.bar(ax=ax0,)
+        ax0.set_title('Missing Data Counts by Feature')
+        pct_missing_list=[f'{round(pct)}%' for pct in (100*feat_miss_count_ser/n).tolist()]
+        self.addAnnotations(ax0,pct_missing_list)
+        
+        row_miss_count_ser=feat_miss_count_ser=self.X_nan_bool_df.astype(np.int16).sum(axis=1)
+        ax1.bar(np.arange(n),row_miss_count_ser.to_numpy(),width=1)
+        ax1.set_title('Missing Data Counts by Row')
+        
+        
+        nan_01_sum=nan_01.sum(axis=0)
+        has_nan_features=nan_01_sum>0
         nan_01_hasnan=nan_01[:,has_nan_features]
         hasnan_features=[name for i,name in enumerate(feature_names) if has_nan_features[i]] 
         nan_corr=self.pearsonCorrelationMatrix(nan_01_hasnan)
@@ -86,29 +149,33 @@ class VBSummary(myLogger):
         corr_linkage = hierarchy.ward(nan_corr)
         dendro = hierarchy.dendrogram( #just used for ordering the features by the grouping
             corr_linkage, labels=hasnan_features, ax=None,no_plot=True, leaf_rotation=90)
-        feature_count=np.arange(nan_01.shape[1])
         
-        plt.rcParams['font.size'] = '8'
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8),dpi=200)
-        ax1.imshow(nan_01,aspect='auto',interpolation='none',cmap='plasma')
+        ax2.imshow(nan_01,aspect='auto',interpolation='none',cmap='plasma')
         colors=[plt.get_cmap('plasma')(value) for value in [255]]
         labels=['missing data']
         patches=[Patch(color=colors[i],label=labels[i]) for i in [0]]
-        ax1.legend(handles=patches,bbox_to_anchor=(0.5,1.05),loc=9,ncol=2,fontsize='large')
-        ax1.set_xticks(feature_idx)
-        ax1.set_xticklabels(feature_names, rotation='vertical',fontsize=6)
+        ax2.legend(handles=patches,bbox_to_anchor=(0,1.1),loc=9,ncol=2,fontsize='large')
+        ax2.set_xticks(feature_idx)
+        ax2.set_xticklabels(feature_names, rotation='vertical',fontsize=6)
+        ax2.set_title('Missing Data Layout')
         
-        ax2.imshow(nan_corr[dendro['leaves'],:][:,dendro['leaves']],aspect='equal',interpolation='none')
+        cp=ax3.imshow(nan_corr[dendro['leaves'],:][:,dendro['leaves']],aspect='equal',interpolation='none')
+        fig.colorbar(cp,shrink=0.5)
         hasnan_feature_idx=np.arange(len(hasnan_features))
-        ax2.set_yticks(hasnan_feature_idx)
-        ax2.set_xticks(hasnan_feature_idx)
-        ax2.set_xticklabels(dendro['ivl'], rotation='vertical',fontsize=6)
-        ax2.set_yticklabels(dendro['ivl'],fontsize=6)
-        ax2.set_title('Missing Data Clustering Across Features')
+        ax3.set_yticks(hasnan_feature_idx)
+        ax3.set_xticks(hasnan_feature_idx)
+        ax3.set_xticklabels(dendro['ivl'], rotation='vertical',fontsize=6)
+        ax3.set_yticklabels(dendro['ivl'],fontsize=6)
+        ax3.set_title('Missing Data Clustering Across Features')
         fig.tight_layout()
     
 
-    
+    def addAnnotations(self,ax,notes):
+        for i,p in enumerate(ax.patches):
+            width = p.get_width()
+            height = p.get_height()
+            x, y = p.get_xy() 
+            ax.annotate(notes[i], (x + width/2, y + height+1), ha='center',fontsize=6)
     
     def hierarchicalDendrogram(self,linkage='ward',dist='spearmanr'):
         #from https://scikit-learn.org/dev/auto_examples/inspection/plot_permutation_importance_multicollinear.html#sphx-glr-auto-examples-inspection-plot-permutation-importance-multicollinear-py
@@ -131,7 +198,8 @@ class VBSummary(myLogger):
         )
         dendro_idx = np.arange(0, len(dendro['ivl']))
 
-        ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']],aspect='equal',interpolation='none')
+        cp=ax2.imshow(corr[dendro['leaves'], :][:, dendro['leaves']],aspect='equal',interpolation='none')
+        fig.colorbar(cp,shrink=0.5)
         ax2.set_xticks(dendro_idx)
         ax2.set_yticks(dendro_idx)
         ax2.set_xticklabels(dendro['ivl'], rotation='vertical',fontsize=6)
