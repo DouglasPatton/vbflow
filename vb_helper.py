@@ -45,7 +45,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=15,shuffle=True):
+    def __init__(self,drop_duplicates=False,nan_threshold=0.99,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=15,shuffle=True):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -54,6 +54,7 @@ class VBHelper(myLogger):
         self.test_share=test_share
         self.rs=random_state
         self.drop_duplicates=drop_duplicates
+        self.nan_threshold=nan_threshold
         self.shuffle=shuffle
         
         # below are added in the notebook
@@ -128,7 +129,14 @@ class VBHelper(myLogger):
                 print(f'# of X_duplicates dropped: {X_dup_sum}')
             else:
                 assert False,'unexpected drop_duplicates:{self.drop_duplicates}'
-            
+        
+        drop_cols=X_df.columns[X_df.isnull().sum(axis=0)/X_df.shape[0]>self.nan_threshold]
+        if len(drop_cols)>0:
+            print(f'columns to drop: {drop_cols}')
+            X_df.drop(drop_cols,axis=1,inplace=True)
+        else:
+            print(f'no columns exceeded nan threshold of {self.nan_threshold}')
+        
             
         return X_df,y_df
         
