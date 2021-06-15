@@ -58,6 +58,17 @@ class BaseHelper:
         return self.pipe_.score(X,y)
     def predict(self,X):
         return self.pipe_.predict(X)
+    
+    def extractParams(self,param_dict,prefix=''):
+        hyper_param_dict={}
+        static_param_dict={}
+        for param_name,val in param_dict.items():
+            if type(val) is list:
+                hyper_param_dict[prefix+param_name]=val
+            else:
+                static_param_dict[param_name]=val
+        return hyper_param_dict,static_param_dict
+                
 
     
 
@@ -245,12 +256,12 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     
 class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
-                 gridpoints=4,inner_cv=None,groupcount=None,
+                 max_n_alphas=1000,inner_cv=None,groupcount=None,
                  bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.do_prep=do_prep
-        self.gridpoints=gridpoints
+        self.max_n_alphas=max_n_alphas
         self.inner_cv=inner_cv
         self.groupcount=groupcount
         self.bestT=bestT
@@ -266,7 +277,7 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         else:
             inner_cv=self.inner_cv
         
-        steps=[('reg',LassoLarsCV(cv=inner_cv,))]
+        steps=[('reg',LassoLarsCV(cv=inner_cv,max_n_alphas=self.max_n_alphas))]
         if self.bestT:
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
         outerpipe=Pipeline(steps=steps)
@@ -278,8 +289,10 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         
         return outerpipe
     
+
+    
 class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None):
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None,gbr_kwargs={'max_depth':[1,2,3],'n_estimators':[64,128]}):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
         self.do_prep=do_prep
@@ -288,6 +301,7 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.float_idx=float_idx
         self.prep_dict=prep_dict
         self.inner_cv=inner_cv
+        self.gbr_kwargs=gbr_kwargs
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     def get_pipe(self):
@@ -295,12 +309,10 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
-            
-        param_grid={'max_depth':list(range(1,3)),
-                    'n_estimators':[75,100]
-                       }
-            
-        steps=[('reg',GridSearchCV(GradientBoostingRegressor(random_state=0),param_grid=param_grid,cv=inner_cv))]
+        hyper_param_dict,gbr_params=self.extractParams(self.gbr_kwargs)    
+        if not 'random_state' in gbr_params:
+            gbr_params['random_state']=0
+        steps=[('reg',GridSearchCV(GradientBoostingRegressor(*gbr_params),param_grid=hyper_param_dict,cv=inner_cv))]
         if self.bestT:
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
         outerpipe= Pipeline(steps=steps)
@@ -372,7 +384,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  gridpoints=4,inner_cv=None,groupcount=None,
-                 float_idx=None,cat_idx=None,bestT=False):
+                 float_idx=None,cat_idx=None,bestT=False,RBFSVR_kwargs:{}):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.do_prep=do_prep
@@ -383,6 +395,7 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
+        self.RBFSVR_kwargs=RBFSVR_kwargs
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     
@@ -391,10 +404,10 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
-            
-        gridpoints=self.gridpoints
-        param_grid={'C':np.logspace(-2,2,gridpoints),
-                   'gamma':np.logspace(-2,0.5,gridpoints)}
+        if self.gridpoints is None:    
+        
+            param_grid={'C':np.logspace(-2,2,self.gridpoints),
+                       'gamma':np.logspace(-2,0.5,self.gridpoints)}
         steps=[
             ('scaler',StandardScaler()),
             ('reg',GridSearchCV(SVR(kernel='rbf',cache_size=10000,tol=1e-4,max_iter=5000),param_grid=param_grid))]
