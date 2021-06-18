@@ -292,7 +292,7 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 
     
 class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None,gbr_kwargs={'max_depth':[1,2,3],'n_estimators':[64,128]}):
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None,est_kwargs={'max_depth':[1,2,3],'n_estimators':[64,128]}):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
         self.do_prep=do_prep
@@ -301,7 +301,7 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.float_idx=float_idx
         self.prep_dict=prep_dict
         self.inner_cv=inner_cv
-        self.gbr_kwargs=gbr_kwargs
+        self.est_kwargs=est_kwargs
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     def get_pipe(self):
@@ -309,7 +309,7 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
-        hyper_param_dict,gbr_params=self.extractParams(self.gbr_kwargs)    
+        hyper_param_dict,gbr_params=self.extractParams(self.est_kwargs)    
         if not 'random_state' in gbr_params:
             gbr_params['random_state']=0
         steps=[('reg',GridSearchCV(GradientBoostingRegressor(*gbr_params),param_grid=hyper_param_dict,cv=inner_cv))]
@@ -384,7 +384,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  gridpoints=4,inner_cv=None,groupcount=None,
-                 float_idx=None,cat_idx=None,bestT=False,RBFSVR_kwargs:{}):
+                 float_idx=None,cat_idx=None,bestT=False,est_kwargs:{}):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.do_prep=do_prep
@@ -395,7 +395,7 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
-        self.RBFSVR_kwargs=RBFSVR_kwargs
+        self.est_kwargs=est_kwargs
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     
