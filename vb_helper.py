@@ -65,7 +65,7 @@ class VBHelper(myLogger):
         ##
         self.prediction_model_type= "average"
         self.model_averaging_weights=None
-        self.plotter=VBPlotter()
+        #self.plotter=VBPlotter()
     
     
     def pickleSelf(self,path=None):
@@ -284,7 +284,7 @@ class VBHelper(myLogger):
         #self.cv_y_yhat_dict=cv_y_yhat_dict
         self.cv_err_dict=err_dict
         
-    def jsonifyProjectCVResults(self):
+    def saveCVResults(self):
         full_results=self.arrayDictToListDict(
             {
                 'y':self.y_df.iloc[:,0].to_list(),
@@ -296,11 +296,13 @@ class VBHelper(myLogger):
         )
         self.full_results=full_results
         #df=pd.DataFrame(full_results)
-        with open('project_cv_results.json','w') as f:
+        path='project_cv_results.json'
+        with open(path,'w') as f:
             #df.to_json(f)
             json.dump(full_results,f)
-        print('setting plotter data')
-        self.plotter.setData(full_results)
+        print(f'saved to {path}')
+        #print('setting plotter data')
+        #self.plotter.setData(full_results)
             
     
     def arrayDictToListDict(self,arr_dict):

@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares,minimize
 from sklearn.base import BaseEstimator, TransformerMixin,RegressorMixin
 from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
@@ -50,7 +50,11 @@ class BaseHelper:
         #self.logger(f'self.k_:{self.k_}')
         
         self.pipe_=self.get_pipe() 
-        self.pipe_.fit(X,y)
+        try:
+            self.pipe_.fit(X,y)
+        except:
+            self.logger.exception(f'error fitting pipeline')
+            assert False,'halt fit'
         return self
     def transform(self,X,y=None):
         return self.pipe_.transform(X,y)
@@ -168,6 +172,9 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
     def pipe_residuals(self,B,X,y):
         return self.pipe_(B,X)-y
     
+    def pipe_sq_residuals(self,B,X,y):
+        return np.sum((self.pipe_(B,X)-y)**2)
+    
     def fit(self,X,y):
         if self.form=='expXB':
             self.pipe_=self.expXB
@@ -185,7 +192,7 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
                 self.k+=1
         #https://scipy-cookbook.readthedocs.io/items/robust_regression.html
         if self.robust:
-            self.fit_est_=least_squares(self.pipe_residuals, np.ones(self.k),args=(X, y),loss='soft_l1', f_scale=0.1,)# 
+            self.fit_est_=minimize(self.pipe_sq_residuals, np.ones(self.k),args=(X, y),method='BFGS')# 
         else:
             self.fit_est_=least_squares(self.pipe_residuals, np.ones(self.k),args=(X, y))# 
         return self
@@ -292,7 +299,7 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 
     
 class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None,est_kwargs={'max_depth':[1,2,3],'n_estimators':[64,128]}):
+    def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None,est_kwargs=None):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
         self.do_prep=do_prep
@@ -309,10 +316,12 @@ class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
+        if self.est_kwargs is None:
+            self.est_kwargs={'max_depth':[3,4],'n_estimators':[64,128]}
         hyper_param_dict,gbr_params=self.extractParams(self.est_kwargs)    
         if not 'random_state' in gbr_params:
             gbr_params['random_state']=0
-        steps=[('reg',GridSearchCV(GradientBoostingRegressor(*gbr_params),param_grid=hyper_param_dict,cv=inner_cv))]
+        steps=[('reg',GridSearchCV(GradientBoostingRegressor(**gbr_params),param_grid=hyper_param_dict,cv=inner_cv))]
         if self.bestT:
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
         outerpipe= Pipeline(steps=steps)
@@ -366,11 +375,12 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=self.inner_cv
         gridpoints=self.gridpoints
         #param_grid={'l1_ratio':1-np.logspace(-2,-.03,gridpoints)}
-        l1_ratio=1-np.logspace(-2,-.03,gridpoints)
+        l1_ratio=1-np.logspace(-2,-.03,gridpoints*2)
+        n_alphas=gridpoints*5
         steps=[
             ('scaler',StandardScaler()),
             #('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False,),param_grid=param_grid))]#rewrite to pass list of values to l1_ratio instad of gridsearccv
-            ('reg',ElasticNetCV(cv=inner_cv,normalize=False,l1_ratio=l1_ratio))]
+            ('reg',ElasticNetCV(cv=inner_cv,normalize=False,l1_ratio=l1_ratio,n_alphas=n_alphas))]
             
         if self.bestT:
             steps.insert(0,('xtransform',columnBestTransformer(float_k=len(self.float_idx))))
@@ -384,7 +394,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
 class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  gridpoints=4,inner_cv=None,groupcount=None,
-                 float_idx=None,cat_idx=None,bestT=False,est_kwargs:{}):
+                 float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='LinRegSupreme.log')
         self.logger.info('starting LinRegSupreme logger')
         self.do_prep=do_prep
@@ -395,7 +405,6 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
-        self.est_kwargs=est_kwargs
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
     
@@ -404,10 +413,10 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
-        if self.gridpoints is None:    
         
-            param_grid={'C':np.logspace(-2,2,self.gridpoints),
-                       'gamma':np.logspace(-2,0.5,self.gridpoints)}
+        param_grid={
+            'C':np.logspace(-2,2,self.gridpoints*2),
+            'gamma':np.logspace(-2,0.5,self.gridpoints)}
         steps=[
             ('scaler',StandardScaler()),
             ('reg',GridSearchCV(SVR(kernel='rbf',cache_size=10000,tol=1e-4,max_iter=5000),param_grid=param_grid))]
