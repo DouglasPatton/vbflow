@@ -9,6 +9,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import make_pipeline,FeatureUnion,Pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 
 
 from vb_transformers import none_T#,featureNameExtractor
@@ -46,7 +48,11 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         myLogger.__init__(self,name='missingValHandler.log')
     
     def setPrepDictAttrs(self):
-        
+        if 'cat_approach' in self.prep_dict:
+            self.cat_approach=self.prep_dict['cat_approach']
+        else:
+            self.cat_approach='separate'
+            
         if 'impute_strategy' in self.prep_dict:
             self.strategy=self.prep_dict['impute_strategy']
         else:self.strategy='drop_row'
@@ -82,7 +88,8 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         
         ###########
         cat_encoder=OneHotEncoder(categories=self.cat_list_,sparse=False,) # drop='first'
-        
+    
+            
         if type(self.strategy) is str:
             if self.strategy=='drop':
                 assert False, 'develop drop columns with >X% missing vals then drop rows with missing vals'
@@ -108,10 +115,21 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 numeric_T=('num_imputer', KNNImputer(n_neighbors=k),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
-        
-        Tlist=[numeric_T,categorical_T]    
-        self.T_=ColumnTransformer(transformers=Tlist)
-        self.T_=self.T_.fit(X,y)
+            if self.strategy.lower()=="iterativeimputer":
+                numeric_T=('num_imputer', IterativeImputer(),self.float_idx_)
+                cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
+                categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
+        if self.cat_approach=='together':
+            self.T_=ColumnTransformer(
+                transformers=[('no_transform',none_T(),self.float_idx_),('cat_onehot',cat_encoder,self.obj_idx_)]
+            )
+            self.T_.fit(X,y)
+            X=self.T_.transform(X) #makes numeric
+            self.T1_=numeric_T[1]
+            self.T1_.fit(X,y)
+        else:
+            self.T_=ColumnTransformer(transformers=[numeric_T,categorical_T])
+            self.T_.fit(X,y)
         
         return self
     
@@ -142,10 +160,10 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
         if self.strategy=='drop_row':
-            X=X.dropna(axis=0)    
-        
+            X=X.dropna(axis=0)  
         X=self.T_.transform(X)
-            
+        if self.cat_approach=='together':
+            X=self.T1_.transform(X)
         
         x_nan_count=np.isnan(X).sum() # sums by column and then across columns
         """try:

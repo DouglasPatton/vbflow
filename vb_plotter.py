@@ -66,7 +66,7 @@ class VBPlotter(myLogger):
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
-        fig=plt.figure(figsize=[12,12],dpi=200)
+        fig=plt.figure(figsize=[12,8],dpi=200)
         plt.suptitle(f"CV-test-Yhat Vs. Y Across {self.cv_reps} repetitions of CV.")
         
         #ax.set_xlabel('estimator')
@@ -143,7 +143,7 @@ class VBPlotter(myLogger):
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
-        fig=plt.figure(figsize=[12,12],dpi=200)
+        fig=plt.figure(figsize=[12,8],dpi=200)
         plt.suptitle(f"Y and CV-test-Yhat Across {self.cv_reps} repetitions of CV.")
         
         #ax.set_xlabel('estimator')
@@ -191,7 +191,7 @@ class VBPlotter(myLogger):
     
     def plotBoxWhiskerCVScores(self,):
         
-        fig=plt.figure(figsize=[12,15])
+        fig=plt.figure(figsize=[12,8])
         plt.suptitle('Box Whisker plots for fit of each pipeline',fontsize=14)
         for s_idx,(scorer,pipe_scores) in enumerate(self.score_dict.items()):
             ax=fig.add_subplot(len(self.score_dict),1,s_idx+1)
@@ -205,7 +205,7 @@ class VBPlotter(myLogger):
     
     def plotCVScores(self,sort=1):
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
-        fig=plt.figure(figsize=[12,15])
+        fig=plt.figure(figsize=[12,8])
         plt.suptitle(f"Model Scores Across {self.cv_reps} Cross Validation repetitions. ")
         s_count=len(self.score_dict)
         for s_idx,(scorer,pipe_scores) in enumerate(self.score_dict.items()):

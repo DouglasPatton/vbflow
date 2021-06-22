@@ -45,7 +45,7 @@ class myLogger:
         
         
 class VBHelper(myLogger):
-    def __init__(self,drop_duplicates=False,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=8,shuffle=True):
+    def __init__(self,drop_duplicates=False,nan_threshold=0.99,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=15,shuffle=True):
         
         myLogger.__init__(self)
         self.cv_n_jobs=cv_n_jobs
@@ -54,6 +54,7 @@ class VBHelper(myLogger):
         self.test_share=test_share
         self.rs=random_state
         self.drop_duplicates=drop_duplicates
+        self.nan_threshold=nan_threshold
         self.shuffle=shuffle
         
         # below are added in the notebook
@@ -64,7 +65,7 @@ class VBHelper(myLogger):
         ##
         self.prediction_model_type= "average"
         self.model_averaging_weights=None
-        self.plotter=VBPlotter()
+        #self.plotter=VBPlotter()
     
     
     def pickleSelf(self,path=None):
@@ -128,7 +129,14 @@ class VBHelper(myLogger):
                 print(f'# of X_duplicates dropped: {X_dup_sum}')
             else:
                 assert False,'unexpected drop_duplicates:{self.drop_duplicates}'
-            
+        
+        drop_cols=X_df.columns[X_df.isnull().sum(axis=0)/X_df.shape[0]>self.nan_threshold]
+        if len(drop_cols)>0:
+            print(f'columns to drop: {drop_cols}')
+            X_df.drop(drop_cols,axis=1,inplace=True)
+        else:
+            print(f'no columns exceeded nan threshold of {self.nan_threshold}')
+        
             
         return X_df,y_df
         
@@ -202,7 +210,7 @@ class VBHelper(myLogger):
         for pipe_name,model in self.model_dict.items():
             start=time()
             model_i=cross_validate(
-                model, self.X_df, self.y_df, return_estimator=True, 
+                model, self.X_df, self.y_df.iloc[:,0], return_estimator=True, 
                 scoring=self.scorer_list, cv=self.getCV(), n_jobs=n_jobs)
             end=time()
             print(f"{pipe_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
@@ -218,7 +226,7 @@ class VBHelper(myLogger):
                                 new_results[est_n]=[]
                             new_results[est_n].append(m)
                             lil_x=self.X_df.iloc[0:2]
-                            print(f'est_n yhat test: {m.predict(lil_x)}')
+                            #print(f'est_n yhat test: {m.predict(lil_x)}')
                     for est_n in new_results:
                         if est_n in cv_results:
                             est_n+='_fcombo'
@@ -249,7 +257,7 @@ class VBHelper(myLogger):
         cv_folds=self.project_CV_dict['cv_folds']
         train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df)))
         n,k=self.X_df.shape
-        y=self.y_df.to_numpy()
+        y=self.y_df.to_numpy()[:,0]
         data_idx=np.arange(n)
         yhat_dict={};err_dict={};cv_y_yhat_dict={}
         for idx,(pipe_name,result) in enumerate(self.cv_results.items()):
@@ -266,7 +274,7 @@ class VBHelper(myLogger):
                     yhat_arr=cv_est.predict(self.X_df.iloc[test_rows])
                     yhat[test_rows]=yhat_arr
                     err[test_rows]=y[test_rows]-yhat[test_rows]
-                    cv_y_yhat_dict[pipe_name].append((self.y_df.iloc[test_rows].to_numpy(),yhat_arr))
+                    cv_y_yhat_dict[pipe_name].append((self.y_df.iloc[test_rows,0].to_numpy(),yhat_arr))
                 yhat_dict[pipe_name].append(yhat)
                 err_dict[pipe_name].append(err)
                 
@@ -276,10 +284,10 @@ class VBHelper(myLogger):
         #self.cv_y_yhat_dict=cv_y_yhat_dict
         self.cv_err_dict=err_dict
         
-    def jsonifyProjectCVResults(self):
+    def saveCVResults(self):
         full_results=self.arrayDictToListDict(
             {
-                'y':self.y_df.to_list(),
+                'y':self.y_df.iloc[:,0].to_list(),
                 'cv_yhat':self.cv_yhat_dict,
                 'cv_score':self.cv_score_dict,
                 'project_cv':self.project_CV_dict,
@@ -288,11 +296,13 @@ class VBHelper(myLogger):
         )
         self.full_results=full_results
         #df=pd.DataFrame(full_results)
-        with open('project_cv_results.json','w') as f:
+        path='project_cv_results.json'
+        with open(path,'w') as f:
             #df.to_json(f)
             json.dump(full_results,f)
-        print('setting plotter data')
-        self.plotter.setData(full_results)
+        print(f'saved to {path}')
+        #print('setting plotter data')
+        #self.plotter.setData(full_results)
             
     
     def arrayDictToListDict(self,arr_dict):
@@ -317,7 +327,7 @@ class VBHelper(myLogger):
         scorer_list=self.scorer_list
         cv_score_dict={}
         cv_score_dict_means={}
-        y=self.y_df
+        y=self.y_df.iloc[:,0]
         for idx,(pipe_name,result) in enumerate(cv_results.items()):
             #cv_estimators=result['estimator']
             model_idx_scoredict={}
@@ -347,7 +357,7 @@ class VBHelper(myLogger):
     def refitPredictiveModels(self, selected_models: list,  verbose: bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
-        y_df=self.y_df
+        y_df=self.y_df #changed to 1 dim below
         X_df=self.X_df
         self.logger.info("Refitting specified models for prediction...")
         predictive_models = {}
@@ -356,7 +366,7 @@ class VBHelper(myLogger):
             predictive_models[name] = self.model_dict[name]#copy.copy(self.cv_results[name]["estimator"][indx])
         self.logger.info(f"Models:{predictive_models}")
         for name, est in predictive_models.items():
-            predictive_models[name] = est.fit(X_df, y_df)
+            predictive_models[name] = est.fit(X_df, y_df.iloc[:,0])
         self.predictive_models = predictive_models
         self.logger.info("Refitting model for prediction complete.")
 
