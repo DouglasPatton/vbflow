@@ -121,12 +121,12 @@ class VBHelper(myLogger):
         print(f'# of duplicate rows of X: {X_dup_sum}')
         
         if self.drop_duplicates:
-            if self.drop_duplicates=='full':
+            if self.drop_duplicates.lower() in ['yx','xy','full']:
                 X_df=X_df[~full_duplicates]
-                print(f'# of full_duplicates dropped: {full_dup_sum}')
-            elif self.drop_duplicates=='X':
+                print(f'# of duplicate Xy rows dropped: {full_dup_sum}')
+            elif self.drop_duplicates.lower()=='x':
                 X_df=X_df[~X_duplicates]
-                print(f'# of X_duplicates dropped: {X_dup_sum}')
+                print(f'# of duplicate X rows dropped: {X_dup_sum}')
             else:
                 assert False,'unexpected drop_duplicates:{self.drop_duplicates}'
         
@@ -167,7 +167,7 @@ class VBHelper(myLogger):
     
     def setPipeDict(self,pipe_dict):
         if self.run_stacked:
-            self.pipe_dict={'multi_pipe':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples...
+            self.pipe_dict={'stacking_reg':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples...
         else:
             self.pipe_dict=pipe_dict
         
