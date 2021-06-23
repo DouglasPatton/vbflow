@@ -137,9 +137,10 @@ class VBPlotter(myLogger):
                     ax.vlines(
                         y,ymin,ymax,
                         label=f'true_y-{true_y.index[i]}',
-                        color=colors[i],linestyles='---')
-                    
-            ax.grid(True)
+                        color=colors[i],linestyles=':')
+                ax.grid(False)
+            else:        
+                ax.grid(True)
         #ax.xaxis.set_ticks([])
         #ax.xaxis.set_visible(False)
             ax.legend(loc=2)
