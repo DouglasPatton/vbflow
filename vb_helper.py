@@ -51,6 +51,7 @@ class VBHelper(myLogger):
         self.cv_n_jobs=cv_n_jobs
         self.run_stacked=run_stacked
         self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
+        self.jhash=None
         self.test_share=test_share
         self.rs=random_state
         self.drop_duplicates=drop_duplicates
@@ -65,6 +66,8 @@ class VBHelper(myLogger):
         ##
         self.prediction_model_type= "average"
         self.model_averaging_weights=None
+        self.predictive_models={}
+        
         #self.plotter=VBPlotter()
     
     
@@ -109,6 +112,7 @@ class VBHelper(myLogger):
             self.X_test=None;self.y_test=None
         self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
+        
 
     def checkData(self,X_df,y_df):
         data_df=X_df.copy()
@@ -155,6 +159,7 @@ class VBHelper(myLogger):
         X_nan_bool_s=self.X_df_start_order.isnull().to_json()
         
         summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
+        self.summary_data=summary_data
         with open('summaryXy.json','w') as f:
             json.dump(summary_data,f)
         #self.X_float_df=X_float_df
@@ -170,13 +175,14 @@ class VBHelper(myLogger):
             self.pipe_dict={'stacking_reg':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples...
         else:
             self.pipe_dict=pipe_dict
+        self.jhash=joblib.hash([self.X_df,self.y_df,self.pipe_dict,self.project_CV_dict])    
+        
         
     def setModelDict(self,pipe_dict=None):
         if pipe_dict is None:
             self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.pipe_dict.items()}
         else: 
             self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in pipe_dict.items()}
-            
     """def implement_pipe(self,pipe_dict=None):
         else:
             return pipe_dict['pipe]']"""
@@ -193,13 +199,13 @@ class VBHelper(myLogger):
         #expand_multipipes kwarg replaced with self.run_stacked
         n_jobs=self.cv_n_jobs
         cv_results={};new_cv_results={}
-        jhash=joblib.hash([self.X_df,self.y_df,self.pipe_dict,self.project_CV_dict]) #unique identifier
+         #unique identifier
         if try_load:
-            print("jhash: ",jhash)
+            print("jhash: ",self.jhash)
         #jhash2=joblib.hash([self.X_df,self.y_df,self.pipe_dict]) 
         #print('jhash',jhash)
         #print('jhash2',jhash2)
-        fname=os.path.join('stash',f'cv_{jhash}.pkl')
+        fname=os.path.join('stash',f'cv_{self.jhash}.pkl')
         if try_load and os.path.exists(fname):
             with open(fname,'rb') as f:
                 self.cv_results=pickle.load(f)
@@ -357,6 +363,16 @@ class VBHelper(myLogger):
     def refitPredictiveModels(self, selected_models: list,  verbose: bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
+        path=os.path.join('stash','predictive_model-'+self.jhash+'.pkl')
+        if os.path.exists(path):
+            try:
+                with open(path,'rb') as f:
+                    self.predictive_models=pickle.load(f)
+                print(f'predictive models loaded from {path}')
+                return
+            except:
+                print(f'failed to load predictive models from {path}, fitting')
+                
         y_df=self.y_df #changed to 1 dim below
         X_df=self.X_df
         self.logger.info("Refitting specified models for prediction...")
@@ -369,6 +385,8 @@ class VBHelper(myLogger):
             predictive_models[name] = est.fit(X_df, y_df.iloc[:,0])
         self.predictive_models = predictive_models
         self.logger.info("Refitting model for prediction complete.")
+        with open(path,'wb') as f:
+            pickle.dump(self.predictive_models,f)
 
     def setModelAveragingWeights(self):
         pipe_names=list(self.predictive_models.keys())
@@ -423,7 +441,24 @@ class VBHelper(myLogger):
             'test_results':test_results,'test_y':self.y_test
         }
         return collection
+    
+    def predictandSave(self,X_predict,scorer=None):
+        if scorer is None:
+            scorer=self.scorer_list[0]
+        if not str(X_predict.index.to_list()[0])[:7].lower()=='predict':
+            X_predict.index=[f'predict-{idx}' for idx in X_predict.index]
+        yhat=self.predict(X_predict)
+        yhat_cv=self.predict(X_predict,model_type='cross_validation')
         
+        predictresult={
+            'yhat':yhat['prediction'][scorer].to_json(),
+            'cv_yhat':[yhat_cv_by_scorer[scorer].to_json() for yhat_cv_by_scorer in yhat_cv['prediction']],
+            'X_predict':X_predict.to_json(),
+            'selected_models':[*self.predictive_models]}
+        path='project_prediction_results.json'
+        with open(path,'w') as f:
+            json.dump(predictresult,f)
+        print(f'prediction results saved to {path}')
     
     def predict(self, X_df_predict: pd.DataFrame,model_type:str='predictive'):
         if self.model_averaging_weights is None:
@@ -446,8 +481,12 @@ class VBHelper(myLogger):
                     results[name].append(model_cv_i.predict(X_df_predict))
                     for scorer,weights in self.model_averaging_weights[name].items():
                         wtd_yhats[cv_i][scorer] += weights * results[name][cv_i]
+        if model_type=='predictive':
+            wtd_yhats_dfs={scorer:pd.DataFrame(data=arr[:,None],index=X_df_predict.index,columns=['yhat']) for scorer,arr in wtd_yhats.items()}
+        elif model_type=='cross_validation':
+            wtd_yhats_dfs=[{scorer:pd.DataFrame(data=arr[:,None],index=X_df_predict.index,columns=['yhat']) for scorer,arr in cv_dict.items()} for cv_dict in wtd_yhats]
         results["weights"] = self.model_averaging_weights
-        results["prediction"] = wtd_yhats
+        results["prediction"] = wtd_yhats_dfs
         #results["final-test-predictions"] = self.get_test_predictions()
         return results
 

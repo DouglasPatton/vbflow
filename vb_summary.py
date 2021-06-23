@@ -25,7 +25,7 @@ class VBSummary(myLogger):
         n=self.full_X_float_df.shape[0]
         k=self.full_X_float_df.shape[1]
         g=len(num_cols)
-        fig=plt.figure(figsize=(6*g,12),dpi=200)
+        fig=plt.figure(figsize=(4*g,12),dpi=200)
         cmap='cool'
         X=self.full_X_float_df
         for g_idx,col_count in enumerate(num_cols):

@@ -39,6 +39,8 @@ class VBPlotter(myLogger):
             'cv_model_descrip':None #not developed
         }"""
         self.data_dict=data_dict
+        
+            
         y=np.array(self.data_dict['y'])
         self.y=y
         self.project_CV_dict=self.data_dict['project_cv']
@@ -57,14 +59,21 @@ class VBPlotter(myLogger):
         self.cv_score_dict=data_dict['cv_score']
         self.setScoreDict()
         
+    def setPredictData(self,predictresults):
+        self.predict_results=predictresults
+        self.ypredict=pd.read_json(predictresults['yhat'])
+        self.cv_ypredict=[pd.read_json(cv_i) for cv_i in predictresults['cv_yhat']]
+        self.selected_estimators=predictresults['selected_models']
+        
         
         
 
 
-    def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=None,cv_ypredict=None,estimators='all'):
+    def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=False,cv_ypredict=False,estimators='all',true_y=None):
         #true y on horizontal axis, yhat on vertical axis
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
+        
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,8],dpi=200)
         plt.suptitle(f"CV-test-Yhat Vs. Y Across {self.cv_reps} repetitions of CV.")
@@ -88,7 +97,13 @@ class VBPlotter(myLogger):
         #for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
         for e,(est_name,yhat_stack) in enumerate(self.yhat_stack_dict.items()):
             if not estimators=='all':
-                if not est_name in estimators:continue
+                if estimators=='selected':
+                    if not est_name in self.selected_estimators:continue
+                else:assert False,'not developed'
+            if ypredict or cv_ypredict:
+                all_y=np.concatenate([y,yhat_stack],axis=0)
+                ymin=all_y.min()
+                ymax=all_y.max()
             if not single_plot:
                 ax=fig.add_subplot(est_count,1,e+1)
                 ax.scatter(y,y,s=20,alpha=0.6,label='y',zorder=0,color='k')
@@ -101,14 +116,29 @@ class VBPlotter(myLogger):
                 y,yhat_stack.reshape(self.cv_reps,n).mean(axis=0),
                 s=20,marker='*',color=colors[e],alpha=0.7,label=f'mean_cv_yhat_{est_name}',zorder=2)
             #ax.hist(scores,density=1,color=colors[e_idx],alpha=0.5,label=estimator_name+' cv score='+str(np.mean(cv_score_dict[estimator_name][scorer])))
-            if not ypredict is None:
-                assert type(ypredict) is dict,f'expecting dict for ypredict, got: {type(ypredict)}'
-                yhat_est=ypredict[est_name]
-                all_y=np.concatenate(y,yhat_stack,axis=0)
-                ymin=all_y.min()
-                ymax=all_y.max()
-                ax.hlines(yhat_est,ymin,ymax)
+            
+            if ypredict:
                 
+                yhat_df=self.ypredict
+                for i,idx in enumerate(yhat_df.index):
+                    ax.hlines(yhat_df.loc[idx],ymin,ymax,label=idx,color=colors[i])
+            if cv_ypredict:
+                cv_yhat_list=self.cv_ypredict
+                for cv_i,cv_yhat_df in enumerate(cv_yhat_list):
+                    for i,idx in enumerate(cv_yhat_df.index):
+                        label_i = f'cv_{idx}' if cv_i==0 else None
+                        ax.hlines(
+                            cv_yhat_df.loc[idx],ymin,ymax,
+                            color=colors[i],alpha=0.15,linestyles='--',
+                            label=label_i)
+                    
+            if not true_y is None:
+                for i,y in enumerate(true_y):
+                    ax.vlines(
+                        y,ymin,ymax,
+                        label=f'true_y-{true_y.index[i]}',
+                        color=colors[i],linestyles='---')
+                    
             ax.grid(True)
         #ax.xaxis.set_ticks([])
         #ax.xaxis.set_visible(False)
