@@ -40,12 +40,12 @@ class VBSummary(myLogger):
                 ax.set_title(f'PCA projection of top {col_count} columns')
             else:
                 ax.set_title(f'PCA projection of top {col_count} numeric columns')
-            clb=fig.colorbar(sc,shrink=0.5)
+            clb=fig.colorbar(sc,shrink=0.25,orientation='horizontal')
             clb.ax.set_title('y')
             ax.set_xlabel('component 1')
             ax.set_ylabel('component 2')
             ax.set_zlabel('component 3')
-        
+        fig.tight_layout()
                 
                 
     def getTopNCols(self,n_cols,keep_cats=True):        

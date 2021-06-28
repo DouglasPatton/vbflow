@@ -162,6 +162,7 @@ class VBHelper(myLogger):
         self.summary_data=summary_data
         with open('summaryXy.json','w') as f:
             json.dump(summary_data,f)
+        print(f'summary data saved to summaryXy.json')
         #self.X_float_df=X_float_df
         #self.mvh=mvh
         #return X_float_df    
@@ -306,7 +307,7 @@ class VBHelper(myLogger):
         with open(path,'w') as f:
             #df.to_json(f)
             json.dump(full_results,f)
-        print(f'saved to {path}')
+        print(f'cross validation results saved to {path}')
         #print('setting plotter data')
         #self.plotter.setData(full_results)
             

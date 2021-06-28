@@ -59,11 +59,19 @@ class VBPlotter(myLogger):
         self.cv_score_dict=data_dict['cv_score']
         self.setScoreDict()
         
-    def setPredictData(self,predictresults):
-        self.predict_results=predictresults
+    def setPredictData(self,predictresults,select_row=None):
+        #self.predict_results=predictresults
         self.ypredict=pd.read_json(predictresults['yhat'])
         self.cv_ypredict=[pd.read_json(cv_i) for cv_i in predictresults['cv_yhat']]
         self.selected_estimators=predictresults['selected_models']
+        if not select_row is None:
+            if type(select_row) is list:
+                select=slice(*select_row)
+            else:
+                assert type(select_row) is int,f'unexpected type for select_row: {select_row}'
+                select=slice(select_row,select_row+1)
+            self.ypredict=self.ypredict.iloc[select]
+            self.cv_ypredict=[ser.iloc[select] for ser in self.cv_ypredict]
         
         
         
