@@ -21,7 +21,7 @@ class VBSummary(myLogger):
         self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
         
-    def viewComponents(self,num_cols=[6,9]):
+    def viewComponents(self,num_cols=[6,9],keep_cats=False):
         n=self.full_X_float_df.shape[0]
         k=self.full_X_float_df.shape[1]
         g=len(num_cols)
@@ -30,13 +30,16 @@ class VBSummary(myLogger):
         X=self.full_X_float_df
         for g_idx,col_count in enumerate(num_cols):
             ax=fig.add_subplot(g,1,g_idx+1,projection='3d')
-            keep_cols=self.getTopNCols(col_count)
-            X_scaled_expanded=StandardScaler().fit_transform(PolynomialFeatures(include_bias=False,degree=1).fit_transform(X.loc[(slice(None),keep_cols)]))
+            keep_cols=self.getTopNCols(col_count,keep_cats=keep_cats)
+            X_scaled_expanded=StandardScaler().fit_transform(X.loc[(slice(None),keep_cols)])
             X_orthog=PCA(n_components=3).fit_transform(X_scaled_expanded)
             self.X_orthog=X_orthog
             
-            sc=ax.scatter(*X_orthog.T,c=self.full_y_df.to_numpy(),cmap=cmap,s=4,marker='o',depthshade=False,alpha=0.7)
-            ax.set_title(f'PCA projection of top {col_count} columns')
+            sc=ax.scatter(*X_orthog.T,c=self.full_y_df.to_numpy(),cmap=cmap,s=4,marker='o',depthshade=False,alpha=0.5)
+            if keep_cats:
+                ax.set_title(f'PCA projection of top {col_count} columns')
+            else:
+                ax.set_title(f'PCA projection of top {col_count} numeric columns')
             clb=fig.colorbar(sc,shrink=0.5)
             clb.ax.set_title('y')
             ax.set_xlabel('component 1')
@@ -45,7 +48,7 @@ class VBSummary(myLogger):
         
                 
                 
-    def getTopNCols(self,n_cols):        
+    def getTopNCols(self,n_cols,keep_cats=True):        
         
         try: self.spear_xy,self.r_list
         except:
@@ -55,20 +58,34 @@ class VBSummary(myLogger):
                 r=spearmanr(self.full_y_df,self.full_X_float_df[col]).correlation
                 self.spear_xy.append((r,col))
                 self.r_list.append(r)
-        r_arr=np.array(self.r_list)
+        if keep_cats:
+            r_arr=np.array(self.r_list)
+        else:
+            r_arr=np.array([r for r,col in self.spear_xy if not re.search('__',col)])
         #r_min=r_arr.mean()+r_arr.std()
-        r_min=np.sort(r_arr)[-n_cols]
+        r_min=np.sort(np.abs(r_arr))[-n_cols]
         keep_cols=[]
         for r,col in self.spear_xy:
-            if r>=r_min:
+            if np.abs(r)>=r_min:
                 keep_cols.append(col)
         return keep_cols
         
         
     def kernelDensityPie(self):
-        all_vars=self.full_X_float_df.columns.to_list()
-        float_vars=[name for name in all_vars if not re.search('__',name)]
-        cat_vars=[name for name in all_vars if not name in float_vars]
+        try: self.spear_xy,self.r_list
+        except: 
+            _=self.getTopNCols(1)
+        spear_xy_indexed=[
+            (np.abs(tup[0]),tup[1],i) 
+            for i,tup in enumerate(self.spear_xy)]
+        abs_r_sort,col_sort,idx_sort=zip(
+            *sorted(spear_xy_indexed,reverse=True))
+        r_sort=[self.r_list[i] for i in idx_sort]  
+            
+        
+        all_vars=col_sort
+        float_vars,float_idx=zip(*[(name,i) for i,name in enumerate(all_vars) if not re.search('__',name)])
+        cat_vars,cat_idx_list=zip(*[(name,i) for i,name in enumerate(all_vars) if not name in float_vars])
         cat_var_dict=self.mergeCatVars(cat_vars)
         cat_group_names=list(cat_var_dict.keys())
         float_var_count=len(float_vars)
@@ -82,26 +99,33 @@ class VBSummary(myLogger):
         
         
         for ax_idx,ax in enumerate(axes_list):
+                
             if ax_idx<float_var_count+1:
                 if ax_idx==0:
                     self.full_y_df.plot.density(ax=ax,c='r',ind=200)
                 else:
                     name=float_vars[ax_idx-1]
                     self.full_X_float_df.loc[:,[name]].plot.density(ax=ax,c='b',ind=200)
-                ax.legend(loc=1,bbox_to_anchor=(1,1.2),fontsize='x-small')
+                    r=round(r_sort[float_idx[ax_idx-1]],2)
+                    ax.set_title(f'rank correlation with y: {r}',fontsize='x-small')
+                ax.legend(loc=1,bbox_to_anchor=(1,0.8),fontsize='x-small')
             elif ax_idx<total_var_count:
                 cat_idx=ax_idx-float_var_count-1
                 cat_name=cat_group_names[cat_idx]
                 cat_flavors,var_names=zip(*cat_var_dict[cat_name])
+                cum_r=np.sum(np.abs(np.array([r_sort[cat_idx_list[cat_vars.index(cat)]] for cat in var_names])))
                 cat_df=self.full_X_float_df.loc[:,var_names]
                 cat_df.columns=cat_flavors
                 cat_shares=cat_df.sum()
                 cat_shares.name=cat_name
                 self.cat_shares=cat_shares
                 cat_shares.plot(y=cat_name,ax=ax,kind='pie',fontsize='x-small')
+                r=round(cum_r,2)
+                ax.set_title(f'cumulative abs rank correlation with y: {r}',fontsize='x-small')
                 #ax.legend(fontsize='x-small')
             else:
                 ax.axis('off')
+            #ax.text()
         fig.tight_layout()
         
         
