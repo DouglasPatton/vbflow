@@ -85,9 +85,13 @@ class VBSummary(myLogger):
         
         all_vars=col_sort
         float_vars,float_idx=zip(*[(name,i) for i,name in enumerate(all_vars) if not re.search('__',name)])
-        cat_vars,cat_idx_list=zip(*[(name,i) for i,name in enumerate(all_vars) if not name in float_vars])
-        cat_var_dict=self.mergeCatVars(cat_vars)
-        cat_group_names=list(cat_var_dict.keys())
+        if len(float_vars)<len(all_vars):
+            cat_vars,cat_idx_list=zip(*[(name,i) for i,name in enumerate(all_vars) if not name in float_vars])
+            
+            cat_var_dict=self.mergeCatVars(cat_vars)
+            cat_group_names=list(cat_var_dict.keys())
+        else:
+            cat_var_dict={}
         float_var_count=len(float_vars)
         total_var_count=float_var_count+len(cat_var_dict)+1 #dep var too
         
@@ -144,6 +148,10 @@ class VBSummary(myLogger):
         
     def missingVals(self):
         n=self.X_nan_bool_df.shape[0]
+        if np.sum(self.X_nan_bool_df.to_numpy().ravel())==0:
+            print(f'no missing values found')
+            return
+        
         nan_01=self.X_nan_bool_df.to_numpy().astype(np.int16)
         feature_names=self.X_nan_bool_df.columns.to_list()
         feature_idx=np.arange(len(feature_names))

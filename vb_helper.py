@@ -176,10 +176,11 @@ class VBHelper(myLogger):
         #return X_float_df    
   
     
-   
+    
         
     
     def setPipeDict(self,pipe_dict):
+        self.original_pipe_dict=pipe_dict
         if self.run_stacked:
             self.pipe_dict={'stacking_reg':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples...
         else:
@@ -372,7 +373,8 @@ class VBHelper(myLogger):
     def refitPredictiveModels(self, selected_models: list,  verbose: bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
-        path=os.path.join('stash','predictive_model-'+self.jhash+'.pkl')
+        pjhash=joblib.hash([self.jhash,selected_models])
+        path=os.path.join('stash','predictive_model-'+pjhash+'.pkl')
         if os.path.exists(path):
             try:
                 with open(path,'rb') as f:
@@ -388,7 +390,13 @@ class VBHelper(myLogger):
         predictive_models = {}
         for name in selected_models:
             self.logger.info(f"Name: {name}")
-            predictive_models[name] = self.model_dict[name]#copy.copy(self.cv_results[name]["estimator"][indx])
+            try:
+                predictive_models[name] = self.model_dict[name]#copy.copy(self.cv_results[name]["estimator"][indx])
+            except KeyError:
+                pipe_i=self.original_pipe_dict[name]
+                predictive_models[name] = pipe_i['pipe'](**pipe_i['pipe_kwargs'])
+            except:
+                assert False,f'unexpected selected_model:{name}'
         self.logger.info(f"Models:{predictive_models}")
         for name, est in predictive_models.items():
             predictive_models[name] = est.fit(X_df, y_df.iloc[:,0])

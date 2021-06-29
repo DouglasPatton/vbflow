@@ -69,7 +69,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             if 'object' in list(self.X_dtypes_.values()):
                 self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
             else:
-                self.obj_idx=[]
+                self.obj_idx_=[]
         else:
             self.obj_idx_=self.cat_idx
         self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
@@ -123,14 +123,17 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
         if len(self.obj_idx_)==0:
-            self.T_=numeric_t[1]
+            self.T_=ColumnTransformer(transformers=[numeric_T])
+            self.T_.fit(X,y)
+        elif len(self.float_idx_)==0:
+            self.T_=ColumnTransformer(transformers=[categorical_T])
             self.T_.fit(X,y)
         elif self.cat_approach=='together':
             self.T_=ColumnTransformer(
                 transformers=[('no_transform',none_T(),self.float_idx_),('cat_onehot',cat_encoder,self.obj_idx_)]
             )
             self.T_.fit(X,y)
-            X=self.T_.transform(X) #makes numeric
+            X=self.T_.transform(X) #makes numeric and establishes variable names!
             self.T1_=numeric_T[1]
             self.T1_.fit(X,y)
         else:
@@ -143,20 +146,24 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         cat_feat=[input_features[i]for i in self.obj_idx_]
         float_feat=[input_features[i]for i in self.float_idx_]
         output_features=float_feat
-        cat_T=self.T_.transformers_[1][1]
-        if type(cat_T) is Pipeline:
-            num_cat_feat=cat_T['onehotencoder'].get_feature_names(cat_feat)
-            num_cat_feat__=[]
-            for name in num_cat_feat:
-                for c_idx_l,char in enumerate(name[::-1]):
-                    c_idx=len(name)-c_idx_l
-                    if char=='_':
-                        num_cat_feat__.append(name[:c_idx]+'_'+name[c_idx:])
-                        break
-                        
-            output_features.extend(num_cat_feat__)
-        else:
-            output_features.extend(cat_T.get_feature_names(cat_feat))
+        if len(self.obj_idx_)>0:
+            if len(self.float_idx_)>0:
+                cat_T=self.T_.transformers_[1][1]
+            else:
+                cat_T=self.T_.transformers_[0][1]#b/c there is no numeric_T
+            if type(cat_T) is Pipeline:
+                num_cat_feat=cat_T['onehotencoder'].get_feature_names(cat_feat)
+                num_cat_feat__=[]
+                for name in num_cat_feat:
+                    for c_idx_l,char in enumerate(name[::-1]):
+                        c_idx=len(name)-c_idx_l
+                        if char=='_':
+                            num_cat_feat__.append(name[:c_idx]+'_'+name[c_idx:])
+                            break
+
+                output_features.extend(num_cat_feat__)
+            else:
+                output_features.extend(cat_T.get_feature_names(cat_feat))
         return output_features
         #return featureNameExtractor(self.T_,input_features=input_features).run()
     
@@ -169,7 +176,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 X=pd.DataFrame(X)
             X=X.dropna(axis=0)  
         X=self.T_.transform(X)
-        if len(self.obj_idx_)>0 and self.cat_approach=='together':
+        if len(self.obj_idx_)>0 and len(self.float_idx_)>0 and self.cat_approach=='together':
             X=self.T1_.transform(X)
         
         x_nan_count=np.isnan(X).sum() # sums by column and then across columns
