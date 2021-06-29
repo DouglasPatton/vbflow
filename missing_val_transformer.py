@@ -66,7 +66,10 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             X=pd.DataFrame(X)
         if self.cat_idx is None:
             self.X_dtypes_=dict(X.dtypes)
-            self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
+            if 'object' in list(self.X_dtypes_.values()):
+                self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
+            else:
+                self.obj_idx=[]
         else:
             self.obj_idx_=self.cat_idx
         self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
@@ -119,7 +122,10 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 numeric_T=('num_imputer', IterativeImputer(),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
-        if self.cat_approach=='together':
+        if len(self.obj_idx_)==0:
+            self.T_=numeric_t[1]
+            self.T_.fit(X,y)
+        elif self.cat_approach=='together':
             self.T_=ColumnTransformer(
                 transformers=[('no_transform',none_T(),self.float_idx_),('cat_onehot',cat_encoder,self.obj_idx_)]
             )
@@ -157,12 +163,13 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
     
     
     def transform(self,X,y=None):
-        if type(X)!=pd.DataFrame:
-            X=pd.DataFrame(X)
+        
         if self.strategy=='drop_row':
+            if type(X)!=pd.DataFrame:
+                X=pd.DataFrame(X)
             X=X.dropna(axis=0)  
         X=self.T_.transform(X)
-        if self.cat_approach=='together':
+        if len(self.obj_idx_)>0 and self.cat_approach=='together':
             X=self.T1_.transform(X)
         
         x_nan_count=np.isnan(X).sum() # sums by column and then across columns

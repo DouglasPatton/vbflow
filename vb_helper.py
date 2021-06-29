@@ -110,11 +110,19 @@ class VBHelper(myLogger):
         else:
             self.X_df=X_df;self.y_df=y_df
             self.X_test=None;self.y_test=None
-        self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
+            if 'object' in list(dict(X_df.dtypes).values()):
+                self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
+            else:
+                self.cat_idx=[];self.cat_vars=[]
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
         
 
     def checkData(self,X_df,y_df):
+        X_dtype_dict=dict(X_df.dtypes)
+        for var,dtype in X_dtype_dict.items():
+            if str(dtype)[:3]=='int':
+                #print(f'changing {var} to float from {dtype}')
+                X_df.loc[:,var]=X_df.loc[:,var].astype('float')
         data_df=X_df.copy()
         data_df.loc['dependent_variable',:]=y_df.loc[:,self.dep_var_name]
         X_duplicates=X_df.duplicated()
