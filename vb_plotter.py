@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import json,pickle
+import re
 
 class myLogger:
     def __init__(self,name=None):
@@ -59,21 +60,19 @@ class VBPlotter(myLogger):
         self.cv_score_dict=data_dict['cv_score']
         self.setScoreDict()
         
-    def setPredictData(self,predictresults,select_row=None):
+    def setPredictData(self,predictresults,loc_row=None):
         #self.predict_results=predictresults
         self.ypredict=pd.read_json(predictresults['yhat'])
+        
         self.cv_ypredict=[pd.read_json(cv_i) for cv_i in predictresults['cv_yhat']]
         self.selected_estimators=predictresults['selected_models']
-        if not select_row is None:
-            if type(select_row) is list:
-                select=slice(*select_row)
-            else:
-                assert type(select_row) is int,f'unexpected type for select_row: {select_row}'
-                select=slice(select_row,select_row+1)
-            self.ypredict=self.ypredict.iloc[select]
-            self.cv_ypredict=[ser.iloc[select] for ser in self.cv_ypredict]
-        
-        
+        if not loc_row is None:
+            if not re.search('predict-',str(loc_row)):
+                loc_row=f'predict-{loc_row}'
+            self.ypredict=self.ypredict.loc[[loc_row]]
+            self.cv_ypredict=[ser.loc[[loc_row]] for ser in self.cv_ypredict]
+        #if type(self.ypredict) is pd.Series: 
+        #    self.ypredict=self.ypredict.to_frame()
         
 
 
@@ -81,7 +80,6 @@ class VBPlotter(myLogger):
         #true y on horizontal axis, yhat on vertical axis
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
-        
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
         fig=plt.figure(figsize=[12,8],dpi=200)
         plt.suptitle(f"CV-test-Yhat Vs. Y Across {self.cv_reps} repetitions of CV.")
@@ -141,10 +139,12 @@ class VBPlotter(myLogger):
                             label=label_i)
                     
             if not true_y is None:
-                for i,y in enumerate(true_y):
+                for i,idx in enumerate(self.ypredict.index):
+                    y_idx=''.join(re.split('-',idx)[1:])
+                    y=true_y.loc[y_idx]
                     ax.vlines(
                         y,ymin,ymax,
-                        label=f'true_y-{true_y.index[i]}',
+                        label=f'true_y-{y_idx}',
                         color=colors[i],linestyles=':')
                 ax.grid(False)
             else:        
