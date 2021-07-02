@@ -23,4 +23,6 @@
 ---
 
 ### View Example Notebooks Online
- - [view multi-pipe notebook](https://nbviewer.jupyter.org/github/DouglasPatton/vbflow/blob/master/multipipe.ipynb) 
+ - [view demo1](https://nbviewer.jupyter.org/github/DouglasPatton/vbflow/blob/master/demo1.ipynb)
+ - [view demo2](https://nbviewer.jupyter.org/github/DouglasPatton/vbflow/blob/master/demo2.ipynb) 
+ - [view demo3](https://nbviewer.jupyter.org/github/DouglasPatton/vbflow/blob/master/demo3.ipynb) 
