@@ -7,7 +7,7 @@ from sklearn.linear_model import ElasticNet, LinearRegression, Lars
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder,FunctionTransformer
+from sklearn.preprocessing import OneHotEncoder,FunctionTransformer,StandardScaler
 from sklearn.pipeline import make_pipeline,FeatureUnion,Pipeline
 from sklearn.impute import SimpleImputer,KNNImputer
 from sklearn.feature_selection import f_regression
@@ -183,21 +183,22 @@ class shrinkBigKTransformer(BaseEstimator,TransformerMixin):
         self.k_=k
         if self.max_k is None:
             if self.k_share is None:
-                self.max_k=500
+                self.max_k=k+1
             else:
                 self.max_k=int(k*self.k_share)
-                
+        steps=[('scaler',StandardScaler())]
         if self.selector is None:
             self.selector='Lars'
         if self.selector=='Lars':
-            selector=Lars(fit_intercept=1,normalize=1,n_nonzero_coefs=self.max_k)
+            steps.append(('selector',Lars(fit_intercept=1,normalize=False,n_nonzero_coefs=self.max_k)))
         elif self.selector=='elastic-net':
-            selector=ElasticNet(fit_intercept=True,selection='random',tol=0.001,max_iter=5000,warm_start=1,random_state=0)
+            steps.append(('selector',ElasticNet(fit_intercept=True,selection='random',tol=0.01,max_iter=500,warm_start=False,random_state=0,normalize=False)))
         else:
-            selector=self.selector
-       
-        selector.fit(X,y)
-        self.col_select_=np.arange(k)[np.abs(selector.coef_)>0.0001]
+            steps.append(('selector',self.selector))
+        kshrinker=Pipeline(steps=steps)
+        kshrinker.fit(X,y)
+        coefs=kshrinker['selector'].coef_
+        self.col_select_=np.arange(k)[np.abs(coefs)>0.0001]
         #print(f'self.col_select_:{self.col_select_}')
         if self.col_select_.size<1:
             self.col_select_=np.arange(1)

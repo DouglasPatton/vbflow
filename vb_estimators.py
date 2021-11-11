@@ -3,7 +3,7 @@ from scipy.optimize import least_squares,minimize
 from sklearn.base import BaseEstimator, TransformerMixin,RegressorMixin
 from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
-from sklearn.experimental import enable_hist_gradient_boosting  
+
 from sklearn.ensemble import GradientBoostingRegressor,HistGradientBoostingRegressor,StackingRegressor
 from sklearn.linear_model import ElasticNet, LinearRegression, Lars,Lasso,LassoCV,LassoLarsCV,ElasticNetCV
 from sklearn.svm import LinearSVR, SVR
@@ -24,6 +24,9 @@ try:
     daal4py.sklearn.patch_sklearn()
 except:
     print('no daal4py')
+
+from sklearn.experimental import enable_hist_gradient_boosting  
+    
 
 class myLogger:
     def __init__(self,name=None):
@@ -284,7 +287,8 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         else:
             inner_cv=self.inner_cv
         
-        steps=[('reg',LassoLarsCV(cv=inner_cv,max_n_alphas=self.max_n_alphas))]
+        steps=[('scaler',StandardScaler()),
+            ('reg',LassoLarsCV(cv=inner_cv,max_n_alphas=self.max_n_alphas,normalize=False))]
         if self.bestT:
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
         outerpipe=Pipeline(steps=steps)
