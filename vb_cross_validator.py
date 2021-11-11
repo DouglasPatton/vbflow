@@ -19,7 +19,7 @@ class regressor_q_stratified_cv:
                 y_vec=y[:,0]
         else:
             y_vec=y
-        kgroups=self.discretizer.fit_transform(y[:,None])[:,0]
+        kgroups=self.discretizer.fit_transform(y_vec[:,None])[:,0]
         return self.cv.split(X,kgroups,groups)
     
     def get_n_splits(self,X,y,groups=None):
