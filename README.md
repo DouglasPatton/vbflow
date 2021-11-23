@@ -9,7 +9,7 @@
 #### Access a command line interface (CLI) by opening a terminal(Linux) or the anaconda prompt (Windows).
 #### Run the highlighted `lines of code` below to setup your environment
  - create a conda environment called *vbflow*
-   - `conda create -c conda-forge --name vbflow python=3.8 jupyterlab scikit-learn=0.24.1 matplotlib pandas`
+   - `conda create -c conda-forge --name vbflow python=3.9 jupyterlab scikit-learn=1 matplotlib pandas`
  - activate the environment you just made by typing
    - `conda activate vbflow`
    

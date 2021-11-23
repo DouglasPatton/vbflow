@@ -466,7 +466,7 @@ class VBHelper(myLogger):
             X_predict.index=[f'predict-{idx}' for idx in X_predict.index]
         yhat=self.predict(X_predict)
         yhat_cv=self.predict(X_predict,model_type='cross_validation')
-        
+        CVPlusPI().run(y_train,cv_yhat_train,)
         predictresult={
             'yhat':yhat['prediction'][scorer].to_json(),
             'cv_yhat':[yhat_cv_by_scorer[scorer].to_json() for yhat_cv_by_scorer in yhat_cv['prediction']],
