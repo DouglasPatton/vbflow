@@ -62,15 +62,19 @@ class VBPlotter(myLogger):
         
     def setPredictData(self,predictresults,loc_row=None):
         #self.predict_results=predictresults
-        self.ypredict=pd.read_json(predictresults['yhat'])
+        self.ypredict=pd.read_json(predictresults['yhat_predict'],typ='series')
         
-        self.cv_ypredict=[pd.read_json(cv_i) for cv_i in predictresults['cv_yhat']]
-        self.selected_estimators=predictresults['selected_models']
+        self.cv_ypredict=[pd.read_json(cv_i,typ='series') for cv_i in predictresults['cv_yhat_predict']]
+        self.selected_estimator=predictresults['selected_model']
+        self.yhat_predict_PI={PI_name:pd.read_json(PIdf) for PI_name,PIdf in predictresults['yhat_predict_PI'].items()}
         if not loc_row is None:
             if not re.search('predict-',str(loc_row)):
                 loc_row=f'predict-{loc_row}'
             self.ypredict=self.ypredict.loc[[loc_row]]
             self.cv_ypredict=[ser.loc[[loc_row]] for ser in self.cv_ypredict]
+            self.yhat_predict_PI={nm:pidf.loc[[loc_row]] for nm,pidf in self.yhat_predict_PI.items()}
+            
+            
         #if type(self.ypredict) is pd.Series: 
         #    self.ypredict=self.ypredict.to_frame()
         
@@ -104,7 +108,7 @@ class VBPlotter(myLogger):
         for e,(est_name,yhat_stack) in enumerate(self.yhat_stack_dict.items()):
             if not estimators=='all':
                 if estimators=='selected':
-                    if not est_name in self.selected_estimators:continue
+                    if not est_name == self.selected_estimator:continue
                 else:assert False,'not developed'
             if ypredict or cv_ypredict:
                 all_y=np.concatenate([y,yhat_stack],axis=0)

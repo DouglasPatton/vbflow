@@ -23,9 +23,12 @@ try:
     import daal4py.sklearn
     daal4py.sklearn.patch_sklearn()
 except:
-    print('no daal4py')
-
-from sklearn.experimental import enable_hist_gradient_boosting  
+    pass
+    #print('no daal4py')
+try: #for sklearn version 0.23, 0.24 for example
+    from sklearn.experimental import enable_hist_gradient_boosting  
+except:
+    pass
     
 
 class myLogger:

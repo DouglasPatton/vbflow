@@ -15,6 +15,7 @@ from sklearn.impute import SimpleImputer,KNNImputer
 from vb_estimators import MultiPipe,FCombo,NullModel
 from missing_val_transformer import missingValHandler
 from vb_plotter import VBPlotter
+from vb_pi import CVPlusPI
 import json,pickle
 import joblib
 
@@ -38,7 +39,7 @@ class myLogger:
         handlername=os.path.join(logdir,name)
         logging.basicConfig(
             handlers=[logging.handlers.RotatingFileHandler(handlername, maxBytes=10**7, backupCount=100)],
-            level=logging.DEBUG,
+            level=logging.INFO,
             format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
             datefmt='%Y-%m-%dT%H:%M:%S')
         self.logger = logging.getLogger(handlername)
@@ -64,8 +65,8 @@ class VBHelper(myLogger):
         self.pipe_dict=None
         self.model_dict=None
         ##
-        self.prediction_model_type= "average"
-        self.model_averaging_weights=None
+        #self.prediction_model_type= "average"
+        #self.model_averaging_weights=None
         self.predictive_models={}
         
         #self.plotter=VBPlotter()
@@ -370,15 +371,15 @@ class VBHelper(myLogger):
             for pipe_name in self.model_dict:
                 print(f'    {pipe_name}:{self.cv_score_dict_means[pipe_name][scorer]}')
     
-    def refitPredictiveModels(self, selected_models: list,  verbose: bool=False):
+    def refitPredictiveModel(self, selected_model: str,  verbose: bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
-        pjhash=joblib.hash([self.jhash,selected_models])
+        pjhash=joblib.hash([self.jhash,selected_model])
         path=os.path.join('stash','predictive_model-'+pjhash+'.pkl')
         if os.path.exists(path):
             try:
                 with open(path,'rb') as f:
-                    self.predictive_models=pickle.load(f)
+                    self.predictive_model=pickle.load(f)
                 print(f'predictive models loaded from {path}')
                 return
             except:
@@ -387,25 +388,22 @@ class VBHelper(myLogger):
         y_df=self.y_df #changed to 1 dim below
         X_df=self.X_df
         self.logger.info("Refitting specified models for prediction...")
-        predictive_models = {}
-        for name in selected_models:
-            self.logger.info(f"Name: {name}")
-            try:
-                predictive_models[name] = self.model_dict[name]#copy.copy(self.cv_results[name]["estimator"][indx])
-            except KeyError:
-                pipe_i=self.original_pipe_dict[name]
-                predictive_models[name] = pipe_i['pipe'](**pipe_i['pipe_kwargs'])
-            except:
-                assert False,f'unexpected selected_model:{name}'
-        self.logger.info(f"Models:{predictive_models}")
-        for name, est in predictive_models.items():
-            predictive_models[name] = est.fit(X_df, y_df.iloc[:,0])
-        self.predictive_models = predictive_models
+        try:
+            predictive_model=(selected_model,self.model_dict[selected_model].fit(X_df,y_df.iloc[:,0]))#copy.copy(self.cv_results[name]["estimator"][indx])
+        except KeyError:
+            pipe_i=self.original_pipe_dict[selected_model]
+            predictive_model=(name, pipe_i['pipe'](**pipe_i['pipe_kwargs']).fit(X_df,y_df.iloc[:,0]))
+        except:
+            self.logger.exception('error refiting predictive model')
+            assert False,f'unexpected selected_model:{selected_model}'
+        #self.logger.info(f"Model:{predictive_model}")
+        #predictive_model[1] = predictive_model[1].fit(X_df, y_df.iloc[:,0])
+        self.predictive_model = predictive_model
         self.logger.info("Refitting model for prediction complete.")
         with open(path,'wb') as f:
-            pickle.dump(self.predictive_models,f)
+            pickle.dump(self.predictive_model,f)
 
-    def setModelAveragingWeights(self):
+    '''def setModelAveragingWeights(self):
         pipe_names=list(self.predictive_models.keys())
         model_count=len(self.predictive_models)
         if self.prediction_model_type == "average":
@@ -449,6 +447,7 @@ class VBHelper(myLogger):
             return
         else:
             assert False,'option not recognized'
+            '''
     
     def getPredictionValues(self,X_df_predict):
         prediction_results=self.predict(X_df_predict)
@@ -459,63 +458,71 @@ class VBHelper(myLogger):
         }
         return collection
     
-    def predictandSave(self,X_predict,scorer=None):
+    def predictandSave(self,X_predict,scorer=None,build_PI='cvplus'):
         if scorer is None:
             scorer=self.scorer_list[0]
         if not str(X_predict.index.to_list()[0])[:7].lower()=='predict':
             X_predict.index=[f'predict-{idx}' for idx in X_predict.index]
-        yhat=self.predict(X_predict)
-        yhat_cv=self.predict(X_predict,model_type='cross_validation')
-        CVPlusPI().run(y_train,cv_yhat_train,)
+        yhat_predict=self.predict(X_predict) 
+        self.yhat_predict=yhat_predict
+        yhat_cv_predict=self.predict(X_predict,model_type='cross_validation')
+        
+        if not build_PI is None:
+            if build_PI.lower() in ['cv+','cvplus']:
+                prediction_interval=self.doCVPlusPI(yhat_cv_predict)
+            else: assert False,f'build_PI option: {build_PI} not developed'
+        else: prediction_interval=None
+        
+        
         predictresult={
-            'yhat':yhat['prediction'][scorer].to_json(),
-            'cv_yhat':[yhat_cv_by_scorer[scorer].to_json() for yhat_cv_by_scorer in yhat_cv['prediction']],
+            'yhat_predict':yhat_predict.to_json(),#json strings
+            'cv_yhat_predict':[yhat_predict_i.to_json() for yhat_predict_i in yhat_cv_predict],
             'X_predict':X_predict.to_json(),
-            'selected_models':[*self.predictive_models]}
+            'yhat_predict_PI':{str(build_PI):prediction_interval.to_json()},#build_PI might be "cv+",None,...?
+            'selected_model':self.predictive_model[0]} # just the name
         path='project_prediction_results.json'
         with open(path,'w') as f:
             json.dump(predictresult,f)
         print(f'prediction results saved to {path}')
+        
+    def doCVPlusPI(self,yhat_cv_predict,alpha=0.05,collapse_reps='pre_mean',true_y_predict=None):
+        y_train=np.array(self.full_results['y'])
+        cv_yhat_train_arr=np.concatenate(
+            [np.array(y_list)[None,:] for y_list in self.full_results['cv_yhat'][self.predictive_model[0]]],axis=0
+            ) # dims: (n_reps,train_n)
+        yhat_cv_predict_arr=np.concatenate([yhat_i[None,:] for yhat_i in yhat_cv_predict],axis=0) # None adds a new dimension 
+        #     that will be used for concatenating the different predictions across reps and splits dims:(n_reps*n_splits,predict_n)
+        lower,upper=CVPlusPI().run(
+            y_train,cv_yhat_train_arr,yhat_cv_predict_arr,
+            alpha=alpha,collapse_reps=collapse_reps,true_y_predict=true_y_predict)
+        #print(lower,upper)
+        df=pd.DataFrame(data={f'lowerPI-{alpha}':lower,f'upperPI-{alpha}':upper},index=yhat_cv_predict[0].index)
+        self.PIdf=df
+        return df
+        
     
     def predict(self, X_df_predict: pd.DataFrame,model_type:str='predictive'):
-        if self.model_averaging_weights is None:
-            self.setModelAveragingWeights()
-        results = {}
-        
-        if model_type=='cross_validation':
-            wtd_yhats=[{scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list} for _ in range(self.project_CV_dict['cv_count'])]
-        else:
-            wtd_yhats={scorer:np.zeros(X_df_predict.shape[0]) for scorer in self.scorer_list}
-        for name, est in self.predictive_models.items():
-            if model_type=='predictive':
-                results[name] = est.predict(X_df_predict)
-                for scorer,weights in self.model_averaging_weights[name].items():
-                    wtd_yhats[scorer] += weights * results[name]
-            elif model_type=='cross_validation':
-                results[name]=[]
-                for cv_i in range(self.project_CV_dict['cv_count']):
-                    model_cv_i=self.cv_results[name]['estimator'][cv_i]
-                    results[name].append(model_cv_i.predict(X_df_predict))
-                    for scorer,weights in self.model_averaging_weights[name].items():
-                        wtd_yhats[cv_i][scorer] += weights * results[name][cv_i]
+        name,est=self.predictive_model
         if model_type=='predictive':
-            wtd_yhats_dfs={scorer:pd.DataFrame(data=arr[:,None],index=X_df_predict.index,columns=['yhat']) for scorer,arr in wtd_yhats.items()}
+            results=pd.Series(data=est.predict(X_df_predict),index=X_df_predict.index,name='yhat')
         elif model_type=='cross_validation':
-            wtd_yhats_dfs=[{scorer:pd.DataFrame(data=arr[:,None],index=X_df_predict.index,columns=['yhat']) for scorer,arr in cv_dict.items()} for cv_dict in wtd_yhats]
-        results["weights"] = self.model_averaging_weights
-        results["prediction"] = wtd_yhats_dfs
-        #results["final-test-predictions"] = self.get_test_predictions()
+            cv_list=[]
+            for cv_i in range(self.project_CV_dict['cv_count']):
+                model_cv_i=self.cv_results[name]['estimator'][cv_i]
+                cv_list.append(pd.Series(data=model_cv_i.predict(X_df_predict),index=X_df_predict.index,name='yhat'))
+            results=cv_list
+        
         return results
 
     def get_test_predictions(self):
         test_results = {}
         if self.X_test is None:
             return test_results
-        for name, est in self.predictive_models.items():
-            r = {
-                "y": self.y_test.to_list(),
-                "yhat": est.predict(self.X_test)
-            }
-            test_results[name] = r
+        name, est = self.predictive_model
+        r = {
+            "y": self.y_test.to_list(),
+            "yhat": est.predict(self.X_test)
+        }
+        test_results[name] = r
         return test_results
     
