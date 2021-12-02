@@ -27,6 +27,7 @@ class myLogger:
         
         
 class VBPlotter(myLogger):
+    #https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
     def __init__(self):
         myLogger.__init__(self)
             
@@ -80,7 +81,7 @@ class VBPlotter(myLogger):
         
 
 
-    def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=False,cv_ypredict=False,estimators='all',true_y=None):
+    def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=False,cv_ypredict=False,estimators='all',true_y=None,prediction_interval=False):
         #true y on horizontal axis, yhat on vertical axis
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
@@ -141,7 +142,21 @@ class VBPlotter(myLogger):
                             cv_yhat_df.loc[idx],ymin,ymax,
                             color=colors[i],alpha=0.15,linestyles='--',
                             label=label_i)
+            if prediction_interval:
+                for PI_idx,(PI_type,PI_df) in enumerate(self.yhat_predict_PI.items()):
+                    for i,idx in enumerate(PI_df.index):
+                        cols=PI_df.columns
+                        for col in cols:
+                            ax.vlines(
+                                PI_df.loc[idx,col],ymin,ymax,
+                                color=colors[i],alpha=0.7,linestyles=(0, (1, 1)),
+                                label=idx+'_'+col)
+                            
+                        
                     
+                
+            
+            
             if not true_y is None:
                 for i,idx in enumerate(self.ypredict.index):
                     y_idx=''.join(re.split('-',idx)[1:])

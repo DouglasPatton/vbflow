@@ -490,14 +490,31 @@ class VBHelper(myLogger):
         cv_yhat_train_arr=np.concatenate(
             [np.array(y_list)[None,:] for y_list in self.full_results['cv_yhat'][self.predictive_model[0]]],axis=0
             ) # dims: (n_reps,train_n)
-        yhat_cv_predict_arr=np.concatenate([yhat_i[None,:] for yhat_i in yhat_cv_predict],axis=0) # None adds a new dimension 
+        splitter=self.getCV()
+        n_splits=self.project_CV_dict['cv_folds']
+        n_reps=self.project_CV_dict['cv_reps']
+        yhat_cv_predict_arr=np.empty([n_reps,y_train.size,yhat_cv_predict[0].shape[-1]])
+        r=0
+        s=0
+        for train_idx,test_idx in splitter.split(y_train):
+            assert r<n_reps
+            yhat_cv_predict_arr[r,test_idx,:]=yhat_cv_predict[r*n_splits+s].to_numpy()
+            s+=1
+            if s==n_splits:
+                r+=1
+                s=0
+            
+            
+            
+            
+        #yhat_cv_predict_arr=np.concatenate([yhat_i[None,:] for yhat_i in yhat_cv_predict],axis=0) # None adds a new dimension 
         #     that will be used for concatenating the different predictions across reps and splits dims:(n_reps*n_splits,predict_n)
         lower,upper=CVPlusPI().run(
             y_train,cv_yhat_train_arr,yhat_cv_predict_arr,
             alpha=alpha,collapse_reps=collapse_reps,true_y_predict=true_y_predict)
         #print(lower,upper)
         df=pd.DataFrame(data={f'lowerPI-{alpha}':lower,f'upperPI-{alpha}':upper},index=yhat_cv_predict[0].index)
-        self.PIdf=df
+        #self.PIdf=df
         return df
         
     

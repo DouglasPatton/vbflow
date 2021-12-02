@@ -18,13 +18,17 @@ class CVPlusPI:
             y_train: {y_train.shape}, cv_yhat_train{cv_yhat_train.shape}'
         cv_train_err=np.abs(y_train[None,:]-cv_yhat_train)# (cn_reps,train_n)
         
-        n_splits=int(cv_yhat_predict.shape[0]/n_reps)
+        '''n_splits=int(cv_yhat_predict.shape[0]/n_reps)
         assert cv_yhat_predict.shape[0]==n_reps*n_splits,f'n_splits should be an integer, but \
             n_splits:{n_splits} and cv_yhat_predict.shape:\
             {cv_yhat_predict.shape}, cv_yhat_train.shape:{cv_yhat_train.shape}'
+        '''
+        assert cv_yhat_predict.shape[1]==train_n
+        assert cv_yhat_predict.shape[0]==n_reps
         
         predict_n=cv_yhat_predict.shape[-1]
-        cv_yhat_predict=cv_yhat_predict.reshape(n_reps,n_splits,predict_n) 
+        
+        #cv_yhat_predict=cv_yhat_predict.reshape(n_reps,n_splits,predict_n) 
         assert type(collapse_reps) is str
         if collapse_reps=='drop':
             cv_yhat_predict=cv_yhat_predict[0][None,:,:] #grab first rep across 0th dim and add dim back
@@ -45,17 +49,17 @@ class CVPlusPI:
                 
         else:assert False,f'collapse_reps:{collapse_reps} not developed'
         if collapse_reps=='post_mean':
-            q_n=train_n*1*n_splits
+            q_n=train_n*1
             alpha_idx=int(np.ceil((q_n+1)*(1-alpha)))
-            lower_q=np.mean(np.sort((cv_yhat_predict[:,:,None,:]-cv_train_err[:,None,:,None]).reshape(n_reps,n_splits*train_n,predict_n),axis=1)[:,-alpha_idx,:],axis=0)
-            #dimensions:(n_reps,n_splits,train_n,predict_n)-> (n_reps,n_splits*train_n,predict_n) -> (n_reps,predict_n,)-> (predict_n,)
-            upper_q=np.mean(np.sort((cv_yhat_predict[:,:,None,:]+cv_train_err[:,None,:,None]).reshape(n_reps,n_splits*train_n,predict_n),axis=1)[:,alpha_idx-1,:],axis=0)
+            lower_q=np.mean(np.sort((cv_yhat_predict-cv_train_err[:,:,None]),axis=1)[:,-alpha_idx,:],axis=0)
+            #dimensions:(n_reps,train_n,predict_n)-> (n_reps,train_n,predict_n) -> (n_reps,predict_n,)-> (predict_n,)
+            upper_q=np.mean(np.sort((cv_yhat_predict+cv_train_err[:,:,None]),axis=1)[:,alpha_idx-1,:],axis=0)
         else:
-            q_n=train_n*n_reps*n_splits
+            q_n=train_n*n_reps
             alpha_idx=int(np.ceil((q_n+1)*(1-alpha)))
-            lower_q=np.sort((cv_yhat_predict[:,:,None,:]-cv_train_err[:,None,:,None]).reshape(n_reps*n_splits*train_n,predict_n),axis=0)[-alpha_idx,:]
+            lower_q=np.sort((cv_yhat_predict-cv_train_err[:,:,None]).reshape(n_reps*train_n,predict_n),axis=0)[-alpha_idx,:]
             #dimensions:(n_reps,n_splits,train_n,predict_n)-> (., predict_n) -> (predict_n,)
-            upper_q=np.sort((cv_yhat_predict[:,:,None,:]+cv_train_err[:,None,:,None]).reshape(n_reps*n_splits*train_n,predict_n),axis=0)[alpha_idx-1,:]
+            upper_q=np.sort((cv_yhat_predict+cv_train_err[:,:,None]).reshape(n_reps*train_n,predict_n),axis=0)[alpha_idx-1,:]
         if not true_y_predict is None:
             assert true_y_predict.shape[-1]==predict_n
             coverage=np.sum(np.ones_like(true_y_predict)[np.where((true_y_predict>lower_q) & (true_y_predict<upper_q))])/predict_n
@@ -67,7 +71,7 @@ class CVPlusPI:
     
     
     @staticmethod
-    def make_data(train_n=15,k=4,predict_n=1000,n_reps=10,n_splits=5):
+    def make_data(train_n=15,k=4,predict_n=100,n_reps=10,n_splits=5):
         #synthetic data for testing
         n=train_n+predict_n
         beta=np.random.normal(size=k+1)*1
@@ -79,7 +83,8 @@ class CVPlusPI:
         true_y_predict=y[train_n:]
         splitter=RepeatedKFold(n_splits=n_splits,n_repeats=n_reps)
         cv_yhat_train=np.empty((n_reps,train_n))
-        cv_yhat_predict=np.empty((n_reps*n_splits,predict_n))
+        #cv_yhat_predict=np.empty((n_reps*n_splits,predict_n))
+        cv_yhat_predict=np.empty((n_reps,train_n,predict_n))
         r=0;s=0
         for cv_train_idx,cv_test_idx in splitter.split(X_train):
 
@@ -89,7 +94,7 @@ class CVPlusPI:
             cv_model=LinearRegression().fit(X_train[cv_train_idx],y=y_train[cv_train_idx])
             yhat_i=cv_model.predict(X_train[cv_test_idx])
             cv_yhat_train[r,cv_test_idx]=yhat_i
-            cv_yhat_predict[r*n_splits+s,:]=cv_model.predict(X_predict)
+            cv_yhat_predict[r,cv_test_idx,:]=cv_model.predict(X_predict)
             s+=1
         return y_train,cv_yhat_train,cv_yhat_predict,true_y_predict
 
