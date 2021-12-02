@@ -101,10 +101,12 @@ class VBPlotter(myLogger):
         #xidx_stack=np.concatenate([np.arange(n)[y_sort_idx] for _ in range(self.cv_reps)],axis=0)# added y_sort_idx to put indices for x in same order as y will be.
         est_count=len(self.cv_yhat_dict)
         if single_plot:
+            adj=1 #allows diff color for true_y if plotted
             ax=fig.add_subplot(111)
             ax.scatter(y,y,s=20,alpha=0.4,label='y',zorder=0,color='k')
             ax.set_xlabel('observed Y')
             ax.set_ylabel('predicted Y')
+        else: adj=0
         #for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
         for e,(est_name,yhat_stack) in enumerate(self.yhat_stack_dict.items()):
             if not estimators=='all':
@@ -153,9 +155,11 @@ class VBPlotter(myLogger):
                                     color=colors[i],alpha=0.7,linestyles=(0, (1, 1)),
                                     label=idx+'_'+col)
                             else:
+                                
                                 ax.vlines(
                                 PI_df.loc[idx,col],ymin,ymax,
-                                color=colors[i],alpha=0.7,linestyles=(0, (1, 1)))
+                                color=colors[i+adj],alpha=0.7,linestyles=(0, (1, 1)),
+                                label=idx+'_'+col)
             
             if not true_y is None:
                 for i,idx in enumerate(self.ypredict.index):
@@ -164,7 +168,7 @@ class VBPlotter(myLogger):
                     ax.vlines(
                         y,ymin,ymax,
                         label=f'true_y-{y_idx}',
-                        color=colors[i],linestyles='solid',linewidth=1.5)
+                        color=colors[i+adj],linestyles='solid',linewidth=1.5)
                 ax.grid(False)
             else:        
                 ax.grid(True)
