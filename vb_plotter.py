@@ -86,7 +86,7 @@ class VBPlotter(myLogger):
         yhat_stack_dict=self.yhat_stack_dict
         y=self.y
         colors = plt.get_cmap('tab10')(np.arange(10))#['r', 'g', 'b', 'm', 'c', 'y', 'k']    
-        fig=plt.figure(figsize=[12,8],dpi=200)
+        fig=plt.figure(figsize=[9,6],dpi=200)
         plt.suptitle(f"CV-test-Yhat Vs. Y Across {self.cv_reps} repetitions of CV.")
         
         #ax.set_xlabel('estimator')
@@ -140,22 +140,22 @@ class VBPlotter(myLogger):
                         label_i = f'cv_{idx}' if cv_i==0 else None
                         ax.hlines(
                             cv_yhat_df.loc[idx],ymin,ymax,
-                            color=colors[i],alpha=0.15,linestyles='--',
+                            color=colors[i],alpha=0.15,linestyles='dashed',
                             label=label_i)
             if prediction_interval:
                 for PI_idx,(PI_type,PI_df) in enumerate(self.yhat_predict_PI.items()):
                     for i,idx in enumerate(PI_df.index):
                         cols=PI_df.columns
                         for col in cols:
-                            ax.vlines(
+                            if true_y is None:
+                                ax.hlines(
+                                    PI_df.loc[idx,col],ymin,ymax,
+                                    color=colors[i],alpha=0.7,linestyles=(0, (1, 1)),
+                                    label=idx+'_'+col)
+                            else:
+                                ax.vlines(
                                 PI_df.loc[idx,col],ymin,ymax,
-                                color=colors[i],alpha=0.7,linestyles=(0, (1, 1)),
-                                label=idx+'_'+col)
-                            
-                        
-                    
-                
-            
+                                color=colors[i],alpha=0.7,linestyles=(0, (1, 1)))
             
             if not true_y is None:
                 for i,idx in enumerate(self.ypredict.index):
@@ -164,7 +164,7 @@ class VBPlotter(myLogger):
                     ax.vlines(
                         y,ymin,ymax,
                         label=f'true_y-{y_idx}',
-                        color=colors[i],linestyles=':')
+                        color=colors[i],linestyles='solid',linewidth=1.5)
                 ax.grid(False)
             else:        
                 ax.grid(True)
