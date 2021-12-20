@@ -5,7 +5,7 @@ from sklearn.datasets import make_regression
 from sklearn.pipeline import make_pipeline,Pipeline
 
 from sklearn.ensemble import GradientBoostingRegressor,HistGradientBoostingRegressor,StackingRegressor
-from sklearn.linear_model import ElasticNet, LinearRegression, Lars,Lasso,LassoCV,LassoLarsCV,ElasticNetCV
+from sklearn.linear_model import ElasticNet, LinearRegression, Lars,Lasso,LassoCV,LassoLarsCV,ElasticNetCV,TweedieRegressor
 from sklearn.svm import LinearSVR, SVR
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, PolynomialFeatures, OneHotEncoder, PowerTransformer
 from sklearn.model_selection import cross_validate, train_test_split, RepeatedKFold, GridSearchCV
@@ -246,7 +246,7 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             
         steps=[
             ('scaler',StandardScaler()),
-            ('select',shrinkBigKTransformer(max_k=4)),
+            ('select',shrinkBigKTransformer(max_k=8)),
             ('reg',FlexibleEstimator(**self.flex_kwargs))
         ]
         if self.bestT:
@@ -266,7 +266,59 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             outerpipe=Pipeline(steps=steps)
             
         return outerpipe
+
     
+    
+class FlexibleGLM(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
+    def __init__(
+        self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,
+        cat_idx=None,float_idx=None,est_kwargs=None,gridpoints=5
+    ):
+        myLogger.__init__(self,name='gbr.log')
+        self.logger.info('starting flexible GLM logger')
+        self.do_prep=do_prep
+        self.bestT=bestT
+        self.cat_idx=cat_idx
+        self.float_idx=float_idx
+        self.prep_dict=prep_dict
+        self.inner_cv=inner_cv
+        self.est_kwargs=est_kwargs
+        self.gridpoints=gridpoints
+        #self.pipe_=self.get_pipe() #formerly inside basehelper         
+        BaseHelper.__init__(self)
+        
+    def get_pipe(self):
+        try:
+            
+            if self.inner_cv is None:
+                inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
+            else:
+                inner_cv=self.inner_cv
+            if self.est_kwargs is None:
+                self.est_kwargs={
+                    'reg__alpha':np.logspace(-5,10,self.gridpoints).tolist(),
+                    'reg__power':[0,*np.logspace(1,3,self.gridpoints-1).tolist()],
+                    'select__max_k':[4,8,32]}
+            steps=[
+                ('scaler',StandardScaler()),
+                ('select',shrinkBigKTransformer(max_k=8)),
+                ('reg',TweedieRegressor())]
+            if self.bestT:
+                steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
+
+            outerpipe=GridSearchCV(Pipeline(steps=steps),param_grid=self.est_kwargs,cv=inner_cv)
+            if self.do_prep:
+                steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
+                       ('post',outerpipe)]
+                outerpipe=Pipeline(steps=steps)
+            return outerpipe
+        except:
+            self.logger.exception(f'get_pipe error for flexibleGLM')
+
+
+
+
+
 class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  max_n_alphas=1000,inner_cv=None,groupcount=None,
