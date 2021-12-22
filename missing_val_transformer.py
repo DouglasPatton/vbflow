@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import ElasticNetCV, LinearRegression, Lars
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import mean_squared_error, make_scorer
 from sklearn.compose import ColumnTransformer
@@ -119,7 +120,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
             if self.strategy.lower()=="iterativeimputer":
-                numeric_T=('num_imputer', IterativeImputer(),self.float_idx_)
+                numeric_T=('num_imputer', IterativeImputer(estimator=LinearRegression(),max_iter=10,tol=.01),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
         if len(self.obj_idx_)==0:
