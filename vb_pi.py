@@ -16,7 +16,7 @@ class CVPlusPI:
         assert y_train.shape[-1]==cv_yhat_train.shape[-1],\
         f'expecting rhs dimensions of y and cv_yhat_train to match. shapes: \
             y_train: {y_train.shape}, cv_yhat_train{cv_yhat_train.shape}'
-        cv_train_err=np.abs(y_train[None,:]-cv_yhat_train)# (cn_reps,train_n)
+        cv_train_err=np.abs(y_train[None,:]-cv_yhat_train)# (cv_reps,train_n)
         
         '''n_splits=int(cv_yhat_predict.shape[0]/n_reps)
         assert cv_yhat_predict.shape[0]==n_reps*n_splits,f'n_splits should be an integer, but \
