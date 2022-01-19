@@ -49,21 +49,22 @@ class VBHelper(myLogger):
     def __init__(self,drop_duplicates=False,nan_threshold=0.99,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=15,shuffle=True):
         
         myLogger.__init__(self)
-        self.cv_n_jobs=cv_n_jobs
-        self.run_stacked=run_stacked
+        self.cv_n_jobs=cv_n_jobs  # number of parallel jobs to run for cross validation step
+        self.run_stacked=run_stacked # boolean for whether to run all estimators inside of stacking regressor
         self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
-        self.jhash=None
-        self.test_share=test_share
-        self.rs=random_state
-        self.drop_duplicates=drop_duplicates
-        self.nan_threshold=nan_threshold
-        self.shuffle=shuffle
+        self.jhash=None # used for saving intermittent steps in the modeling and prediction process to speed up debugging
+        self.test_share=test_share # fraction of data set aside for final testing. usually 0 for small data approach
+        self.rs=random_state 
+        self.drop_duplicates=drop_duplicates #duplicates can be defined over predictors 'X' or over predictors and dependent variable 'Xy' or False
+        self.nan_threshold=nan_threshold #fraction of missing vals in a column of data that triggers dropping that column
+        self.shuffle=shuffle #whether to shuffle data from the start
         
         # below are added in the notebook
         self.scorer_list=None
         self.max_k=None
         self.pipe_dict=None
-        self.model_dict=None
+        self.model_dict=None #will be filled by vb_helper when fitting models
+        self.cv_results=None #will be filled by vb_helper after running cross_validate
         ##
         #self.prediction_model_type= "average"
         #self.model_averaging_weights=None
