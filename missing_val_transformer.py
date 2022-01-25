@@ -47,21 +47,24 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         #print(prep_dict)
         self.setPrepDictAttrs()
         myLogger.__init__(self,name='missingValHandler.log')
-    
+
+
+    #unpacking the dictionary prep_dict
     def setPrepDictAttrs(self):
-        if 'cat_approach' in self.prep_dict:
+        if 'cat_approach' in self.prep_dict: #whether to impute categorical variables separately from floats
             self.cat_approach=self.prep_dict['cat_approach']
         else:
             self.cat_approach='separate'
             
-        if 'impute_strategy' in self.prep_dict:
+        if 'impute_strategy' in self.prep_dict: #imputation strategy, drop_row is the default
             self.strategy=self.prep_dict['impute_strategy']
         else:self.strategy='drop_row'
-        if 'cat_idx' in self.prep_dict:
+
+        if 'cat_idx' in self.prep_dict: #getting the column numbers of the categorical variables
             self.cat_idx=self.prep_dict['cat_idx']
         else:self.cat_idx=None
             
-        
+    #BEGIN HERE NEXT SESSION!!!
     def fit(self,X,y=None):
         if type(X)!=pd.DataFrame:
             X=pd.DataFrame(X)
@@ -142,7 +145,8 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             self.T_.fit(X,y)
         
         return self
-    
+
+
     def get_feature_names(self,input_features=None):
         cat_feat=[input_features[i]for i in self.obj_idx_]
         float_feat=[input_features[i]for i in self.float_idx_]
