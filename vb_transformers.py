@@ -285,7 +285,7 @@ class exp_T(BaseEstimator,TransformerMixin):
         xout[X>0]=np.log(X[X>0])
         return xout  
     
-class none_T(BaseEstimator,TransformerMixin):
+class none_T(BaseEstimator,TransformerMixin): #type of transformer method that does nothing
     def __init__(self):
         pass
     def fit(self,X,y=None):
@@ -300,7 +300,7 @@ class none_T(BaseEstimator,TransformerMixin):
     def inverse_transform(self,X):
         return X  
     
-    def get_feature_names(self,input_features=None):
+    def get_feature_names(self,input_features=None): #gets and returns variable names
         if input_features is None:
             input_features=[f'var_{i}' for i in range(self.k_)]
         return input_features
