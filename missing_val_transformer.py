@@ -63,12 +63,12 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         if 'cat_idx' in self.prep_dict: #getting the column numbers of the categorical variables
             self.cat_idx=self.prep_dict['cat_idx']
         else:self.cat_idx=None
-            
-    #BEGIN HERE NEXT SESSION!!!
+
+    # this fit function is tidying the X data
     def fit(self,X,y=None):
-        if type(X)!=pd.DataFrame:
+        if type(X)!=pd.DataFrame: #if X is not a dataframe, make it so
             X=pd.DataFrame(X)
-        if self.cat_idx is None:
+        if self.cat_idx is None: #if no categorical variable locations supplied, figure out their locations
             self.X_dtypes_=dict(X.dtypes)
             if 'object' in list(self.X_dtypes_.values()):
                 self.obj_idx_=[i for i,(var,dtype) in enumerate(self.X_dtypes_.items()) if dtype=='object']
@@ -76,10 +76,11 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                 self.obj_idx_=[]
         else:
             self.obj_idx_=self.cat_idx
-        self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_]
-        
-        self.cat_list_=[X.iloc[:,idx].unique() for idx in self.obj_idx_]
-        x_nan_count=X.isnull().sum().sum() # sums by column and then across columns
+
+        self.float_idx_=[i for i in range(X.shape[1]) if i not in self.obj_idx_] #any non-categorical variable is a float
+        self.cat_list_=[X.iloc[:,idx].unique() for idx in self.obj_idx_] #figuring out the levels of each categorical variable
+        x_nan_count=X.isnull().sum().sum() #sums all missing values in X
+        #the following block of code records the missing values in y if y is supplied
         try:
             y_nan_count=y.isnull().sum().sum()
         except:
@@ -92,60 +93,65 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
                     y_nan_count='n/a'
                     pass
         self.logger.info(f'x_nan_count:{x_nan_count}, y_nan_count:{y_nan_count}')
-        
-        ###########
-        cat_encoder=OneHotEncoder(categories=self.cat_list_,sparse=False,) # drop='first'
-    
-            
-        if type(self.strategy) is str:
-            if self.strategy=='drop':
+
+        cat_encoder=OneHotEncoder(categories=self.cat_list_,sparse=False,) # scikit learn function that does binarization
+        # of the categorical variables; drop='first' could be used at the end of OneHotEncoder() to drop the first specified level of the category
+
+        if type(self.strategy) is str: #this block is initializing an imputation strategy
+            if self.strategy=='drop': #code for this strategy not written yet
                 assert False, 'develop drop columns with >X% missing vals then drop rows with missing vals'
                 
-            if self.strategy=='pass-through':
+            if self.strategy=='pass-through': #option for estimators that can handle missing values
+                numeric_T=('no_transform',none_T(),self.float_idx_) #tuple has the label, the transformer, and what columns to apply transformer to
+                categorical_T=('cat_onehot',cat_encoder,self.obj_idx_) #NEEDS WORK; maybe cat_encoder could be changed to none_T()
+
+            if self.strategy=='drop_row': #dropping rows with missing values in any variable
+                assert False, "NEEDS WORK"
+                X=X.dropna(axis=0) #overwrite X
                 numeric_T=('no_transform',none_T(),self.float_idx_)
                 categorical_T=('cat_onehot',cat_encoder,self.obj_idx_)
-            if self.strategy=='drop_row':
-                X=X.dropna(axis=0) # overwrite it
                 
-                numeric_T=('no_transform',none_T(),self.float_idx_)
-                categorical_T=('cat_onehot',cat_encoder,self.obj_idx_)
-                
-            if self.strategy=='impute_middle':
+            if self.strategy=='impute_middle': #uses mean (numerical) or most frequent (categorical) for imputation
                 numeric_T=('num_imputer', SimpleImputer(strategy='mean'),self.float_idx_)
-                cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
+                cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder) #chains together imputation and binarization
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
-            if self.strategy[:10]=='impute_knn':
+
+            if self.strategy[:10]=='impute_knn': #uses k nearest neighbor (numerical) or most frequent (categorical)
                 if len(self.strategy)==10:
                     k=5
                 else:
-                    k=int(''.join([char for char in self.strategy[10:] if char.isdigit()])) #extract k from the end
+                    k=int(''.join([char for char in self.strategy[10:] if char.isdigit()])) #extract k from the end of self.strategy string
                 numeric_T=('num_imputer', KNNImputer(n_neighbors=k),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
-            if self.strategy.lower()=="iterativeimputer":
+
+            if self.strategy.lower()=="iterativeimputer": #uses an iterative imputer - MICE
+                #default is Bayesian Ridge Regressor, but that stores way too much info; seems like overkill; switched to linear regression
+                #values for max_iter and tol were specified here to ascertain why disk space storage was so large
                 numeric_T=('num_imputer', IterativeImputer(estimator=LinearRegression(),max_iter=10,tol=.01),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)
-        if len(self.obj_idx_)==0:
+
+        if len(self.obj_idx_)==0: #if no categorical variables, do just numeric transforms
             self.T_=ColumnTransformer(transformers=[numeric_T])
             self.T_.fit(X,y)
-        elif len(self.float_idx_)==0:
+        elif len(self.float_idx_)==0: #if no numeric variables, do just categorical transforms
             self.T_=ColumnTransformer(transformers=[categorical_T])
             self.T_.fit(X,y)
-        elif self.cat_approach=='together':
+        elif self.cat_approach=='together': #categorical variables are binarized and then all variables are imputed as numeric
             self.T_=ColumnTransformer(
                 transformers=[('no_transform',none_T(),self.float_idx_),('cat_onehot',cat_encoder,self.obj_idx_)]
             )
             self.T_.fit(X,y)
-            X=self.T_.transform(X) #makes numeric and establishes variable names!
-            self.T1_=numeric_T[1]
-            self.T1_.fit(X,y)
-        else:
+            X=self.T_.transform(X) #binarizes categorical variables and establishes variable names
+            self.T1_=numeric_T[1] #takes the middle value (transformer) of the listed tuple
+            self.T1_.fit(X,y) #performs the imputation
+        else: #if there are both categorical and numeric variables, and the cat_approach is not 'together',
+            #imputation happens separately for categorical and numeric variables
             self.T_=ColumnTransformer(transformers=[numeric_T,categorical_T])
             self.T_.fit(X,y)
         
         return self
-
 
     def get_feature_names(self,input_features=None):
         cat_feat=[input_features[i]for i in self.obj_idx_]
