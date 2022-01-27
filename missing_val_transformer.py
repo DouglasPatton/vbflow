@@ -65,6 +65,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         else:self.cat_idx=None
 
     # this fit function is tidying the X data
+            
     def fit(self,X,y=None):
         if type(X)!=pd.DataFrame: #if X is not a dataframe, make it so
             X=pd.DataFrame(X)
