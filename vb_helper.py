@@ -42,48 +42,51 @@ class myLogger:
             level=logging.INFO,
             format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
             datefmt='%Y-%m-%dT%H:%M:%S')
-        self.logger = logging.getLogger(handlername)
-        
+        self.logger = logging.getLogger(handlername)    
         
 class VBHelper(myLogger):
-    def __init__(self,drop_duplicates=False,nan_threshold=0.99,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=15,shuffle=True):
-        
+    def __init__(self,drop_duplicates=False,nan_threshold=0.99,test_share=0,cv_folds=5,cv_reps=2,random_state=0,cv_strategy=None,run_stacked=True,cv_n_jobs=4,shuffle=True):       
         myLogger.__init__(self)
-        self.cv_n_jobs=cv_n_jobs  # number of parallel jobs to run for cross validation step
-        self.run_stacked=run_stacked # boolean for whether to run all estimators inside of stacking regressor
-        self.setProjectCVDict(cv_folds,cv_reps,cv_strategy)
-        self.jhash=None # used for saving intermittent steps in the modeling and prediction process to speed up debugging
-        self.test_share=test_share # fraction of data set aside for final testing. usually 0 for small data approach
-        self.rs=random_state 
-        self.drop_duplicates=drop_duplicates #duplicates can be defined over predictors 'X' or over predictors and dependent variable 'Xy' or False
-        self.nan_threshold=nan_threshold #fraction of missing vals in a column of data that triggers dropping that column
-        self.shuffle=shuffle #whether to shuffle data from the start
-        
+        self.cv_n_jobs=cv_n_jobs #the number of separate jobs to use (parallel processing) for cross-validation
+        self.run_stacked=run_stacked #Boolean; indicates whether pipelines should be run as part of a stacking regressor;
+        # see FCombo in vb_estimators.py
+        self.setProjectCVDict(cv_folds,cv_reps,cv_strategy) #this creates a dictionary to store these values
+        self.test_share=test_share #proportion of dataset set aside for final testing; these selected observations will
+        # not be used in any model fitting
+        self.rs=random_state #used to seed all of the random number generators wherever they occur
+        self.drop_duplicates=drop_duplicates #applied to all dataset rows; can be False (do nothing), "X" (has the exact
+        # same covariate values), "Xy" (same covariate values, same response); behavior varies dependent on whether unique
+        # indexing for each observation is included in the uploaded data
+        self.nan_threshold=nan_threshold #applied to each dataset column; can range from 0 to 1; if proportion of nan's
+        # exceeds this threshold, column deleted
+        self.shuffle=shuffle #Boolean; determines if rows of dataset are shuffled prior to cross-validation
+                
         # below are added in the notebook
-        self.scorer_list=None
-        self.max_k=None
-        self.pipe_dict=None
-        self.model_dict=None #will be filled by vb_helper when fitting models
-        self.cv_results=None #will be filled by vb_helper after running cross_validate
+        self.scorer_list=None #list of strings that specify scikit learn scorers (model evaluation metrics where higher
+        # score is better) to use for reporting model accuracy (cross-validation or testing); an example would be
+        # ['neg_mean_squared_error','neg_mean_absolute_error','r2']; see https://scikit-learn.org/stable/modules/model_evaluation.html for all options
+        self.max_k=None #maximun number of covariates selected by shrinking transformers like ShrinkBigTransformers in vb_transformers.py
+        self.pipe_dict=None #dictionary with key:value pairs where key is the pipeline name and value contains the information to create the pipeline
+        self.model_dict=None #dictionary with key:value pairs where key is the pipeline name and value contains an instantiated pipeline, aka a model
         ##
-        #self.prediction_model_type= "average"
-        #self.model_averaging_weights=None
-        self.predictive_models={}
+        self.predictive_models={} #stores a key:value pair where the key is the name of the model and value is the model
         
         #self.plotter=VBPlotter()
-    
-    
+        self.jhash=None #for storing checkpoints to speed up debugging; internal use only
+
+
     def pickleSelf(self,path=None):
         if path is None:
             path='vbhelper.pkl'
         with open(path,'wb') as f:
             pickle.dump(self,f)
-    
+
+
     def setProjectCVDict(self,cv_folds,cv_reps,cv_strategy):
-        if cv_folds is None:
-            cv_folds=10
-        if cv_reps is None:
-            cv_reps=1
+        #cv_folds is the number of cross-validation folds; typical values would be 5 or 10
+        #cv_reps is the number of cross-validaton repetitions; each repetition reshuffles the dataset
+        #cv_strategy allows for different cross-validation strategies; options are None,('quantile',5),('uniform',5) where
+        # 5 represents the group count, which depends on how much data you have; NEEDS DETAILS
         cv_count=cv_reps*cv_folds
         self.project_CV_dict={
             'cv_folds':cv_folds,
@@ -92,81 +95,83 @@ class VBHelper(myLogger):
             'cv_strategy':cv_strategy
         }
         
-    
-    
-    def setData(self,X_df,y_df):
-        self.dep_var_name=y_df.columns.to_list()[0]
-        X_df,y_df=self.checkData(X_df,y_df)
-        self.X_df_start_order=X_df
-        self.y_df_start_order=y_df
-        shuf=np.arange(y_df.shape[0])
-        seed=self.rs
-        rng = np.random.default_rng(seed)
-        rng.shuffle(shuf)
-        X_df=X_df.iloc[shuf]
-        y_df=y_df.iloc[shuf]
-        
+
+    def setData(self,X_df,y_df): #X_df is the covariate data frame, y_df is the series of response data
+        self.dep_var_name=y_df.columns.to_list()[0] #assigning a name to the response variable from y_df
+        X_df,y_df=self.checkData(X_df,y_df) #checkData function call
+        shuf=np.arange(y_df.shape[0]) #create an array (0 to the number of observations-1) to be used for shuffling the data
+        if self.shuffle:
+            seed=self.rs #rs is the previously stored random seed
+            rng = np.random.default_rng(seed) #creating the random number generator
+            rng.shuffle(shuf) #shuffling the shuf array using the random number generator
+            X_df=X_df.iloc[shuf] #shuffling the X_df data
+            y_df=y_df.iloc[shuf] #shuffling the y_df data
+
+        #this condition checks if the user has set aside testing data, and if so, store it to X_test and y_test
+        # and overwrites X_df and y_df to exclude those values
         if self.test_share>0:
             self.X_df,self.X_test,self.y_df,self.y_test=train_test_split(
                 X_df, y_df,test_size=self.test_share,random_state=self.rs)
         else:
             self.X_df=X_df;self.y_df=y_df
             self.X_test=None;self.y_test=None
-            if 'object' in list(dict(X_df.dtypes).values()):
-                self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
-            else:
-                self.cat_idx=[];self.cat_vars=[]
+
+        #this condition checks for categorical variables and stores their location and name in self.cat_idx and self.cat_vars
+        if 'object' in list(dict(X_df.dtypes).values()):
+            self.cat_idx,self.cat_vars=zip(*[(i,var) for i,(var,dtype) in enumerate(dict(X_df.dtypes).items()) if dtype=='object'])
+        else:
+            self.cat_idx=[];self.cat_vars=[]
+
+        #recording all other non-categorical variables
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
         
 
     def checkData(self,X_df,y_df):
-        X_dtype_dict=dict(X_df.dtypes)
+        X_dtype_dict=dict(X_df.dtypes) #converting X_df.dtypes into a dictionary that holds the data types of the covariates
         for var,dtype in X_dtype_dict.items():
             if str(dtype)[:3]=='int':
                 #print(f'changing {var} to float from {dtype}')
-                X_df.loc[:,var]=X_df.loc[:,var].astype('float')
-        data_df=X_df.copy()
+                X_df.loc[:,var]=X_df.loc[:,var].astype('float') #converting integer covariates to floats
+        data_df=X_df.copy() #create a copy of X_df and then combine X_df.copy and y_df into a single data frame on the next line
         data_df.loc['dependent_variable',:]=y_df.loc[:,self.dep_var_name]
-        X_duplicates=X_df.duplicated()
-        full_duplicates=data_df.duplicated()
-        full_dup_sum=full_duplicates.sum()
-        X_dup_sum=X_duplicates.sum()
+        X_duplicates=X_df.duplicated() #makes a new data frame where duplicates observations in X_df are assigned a boolean (True/False)
+        full_duplicates=data_df.duplicated() #same as previous line, but with Xy
+        full_dup_sum=full_duplicates.sum() #counts the number of duplicates in Xy (excluding the first occurrence)
+        X_dup_sum=X_duplicates.sum() #same as previous line, but for X
         print(f'# of duplicate rows of data: {full_dup_sum}')
         print(f'# of duplicate rows of X: {X_dup_sum}')
         
         if self.drop_duplicates:
             if self.drop_duplicates.lower() in ['yx','xy','full']:
-                X_df=X_df[~full_duplicates]
+                X_df=X_df[~full_duplicates] #replacing X_df with a new X_df without any duplicates (first occurrence retained)
                 print(f'# of duplicate Xy rows dropped: {full_dup_sum}')
             elif self.drop_duplicates.lower()=='x':
-                X_df=X_df[~X_duplicates]
+                X_df=X_df[~X_duplicates] #replacing X_df with a new X_df without any duplicates in X (first occurrence retained)
                 print(f'# of duplicate X rows dropped: {X_dup_sum}')
             else:
-                assert False,'unexpected drop_duplicates:{self.drop_duplicates}'
-        
-        drop_cols=X_df.columns[X_df.isnull().sum(axis=0)/X_df.shape[0]>self.nan_threshold]
+                assert False,'unexpected drop_duplicates:{self.drop_duplicates}' #error based on unexpected value for drop_duplicates
+        drop_cols=X_df.columns[X_df.isnull().sum(axis=0)/X_df.shape[0]>self.nan_threshold] #choosing the columns of X that
+        # have more than a threshold proportion of missing values
         if len(drop_cols)>0:
             print(f'columns to drop: {drop_cols}')
-            X_df.drop(drop_cols,axis=1,inplace=True)
+            X_df.drop(drop_cols,axis=1,inplace=True) #deleting those columns from X_df
         else:
             print(f'no columns exceeded nan threshold of {self.nan_threshold}')
-        
-            
-        return X_df,y_df
-        
-        
-        
-        
+
+        return X_df,y_df #returns corrected data frames
+
+
     def saveFullFloatXy(self):
-        mvh=missingValHandler({
+        mvh=missingValHandler({ #create an object for cleaning the covariate data
             'impute_strategy':'impute_knn5'#'pass-through'
         })
-        mvh=mvh.fit(self.X_df_start_order)
-        X_float=mvh.transform(self.X_df_start_order)
-        X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df_start_order.columns.to_list()))
+        #the next lines do data prep, like imputation and binarizing categorical variables
+        mvh=mvh.fit(self.X_df)
+        X_float=mvh.transform(self.X_df)
+        X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
         X_json_s=X_float_df.to_json()# _json_s is json-string
-        y_json_s=self.y_df_start_order.to_json()
-        X_nan_bool_s=self.X_df_start_order.isnull().to_json()
+        y_json_s=self.y_df.to_json()
+        X_nan_bool_s=self.X_df.isnull().to_json()
         
         summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
         self.summary_data=summary_data
@@ -177,10 +182,7 @@ class VBHelper(myLogger):
         #self.mvh=mvh
         #return X_float_df    
   
-    
-    
-        
-    
+
     def setPipeDict(self,pipe_dict):
         self.original_pipe_dict=pipe_dict
         if self.run_stacked:
