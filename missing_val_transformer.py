@@ -13,7 +13,6 @@ from sklearn.impute import SimpleImputer,KNNImputer
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 
-
 from vb_transformers import none_T#,featureNameExtractor
 #,VBHelper,shrinkBigKTransformer,logminus_T,exp_T,logminplus1_T,logp1_T,missingValHandler,dropConst
 #from vb_helper import myLogger
@@ -64,8 +63,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             self.cat_idx=self.prep_dict['cat_idx']
         else:self.cat_idx=None
 
-    # this fit function is tidying the X data
-
+    # learns how to binarize and impute based off the data its fed
     def fit(self,X,y=None):
         if type(X)!=pd.DataFrame: #if X is not a dataframe, make it so
             X=pd.DataFrame(X)
@@ -154,53 +152,51 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         
         return self
 
-    def get_feature_names(self,input_features=None):
-        cat_feat=[input_features[i]for i in self.obj_idx_]
-        float_feat=[input_features[i]for i in self.float_idx_]
-        output_features=float_feat
-        if len(self.obj_idx_)>0:
-            if len(self.float_idx_)>0:
-                cat_T=self.T_.transformers_[1][1]
+    def get_feature_names(self,input_features=None): #unpacks categorical variable names
+        cat_feat=[input_features[i]for i in self.obj_idx_] #getting categorical variable names
+        float_feat=[input_features[i]for i in self.float_idx_] #getting float variable names
+        output_features=float_feat #start a new list of variables, always float/numeric first
+        if len(self.obj_idx_)>0: #if there are categorical variables
+            if len(self.float_idx_)>0: #if there are float variables
+                cat_T=self.T_.transformers_[1][1] #get the second transformer tuple, then get the second item
             else:
-                cat_T=self.T_.transformers_[0][1]#b/c there is no numeric_T
-            if type(cat_T) is Pipeline:
+                cat_T=self.T_.transformers_[0][1]#get the first transformer tuple (b/c no cat vars), then get the second item
+            if type(cat_T) is Pipeline: #categorical transformers that have two steps (binarize then impute) are defined as a Pipeline
                 num_cat_feat=cat_T['onehotencoder'].get_feature_names(cat_feat)
                 num_cat_feat__=[]
-                for name in num_cat_feat:
-                    for c_idx_l,char in enumerate(name[::-1]):
+                #this loop is finding the last underscore in each cat var name and adds another underscore
+                #TEST THIS to make sure it works with all sorts of imported categorical variable names and level names
+                for name in num_cat_feat: #concatenating the name of a cat variable to the various levels of that cat variable, for every cat variable
+                    for c_idx_l,char in enumerate(name[::-1]): #-1 makes the character iteration occur from right to left
                         c_idx=len(name)-c_idx_l
                         if char=='_':
                             num_cat_feat__.append(name[:c_idx]+'_'+name[c_idx:])
                             break
 
                 output_features.extend(num_cat_feat__)
-            else:
+            else: #TEST THIS to see if it works with non-pipeline categorical transformer
                 output_features.extend(cat_T.get_feature_names(cat_feat))
         return output_features
         #return featureNameExtractor(self.T_,input_features=input_features).run()
-    
-    
-    
-    def transform(self,X,y=None):
+
+    def transform(self,X,y=None): #binarize and impute the data based on fit's findings
         
-        if self.strategy=='drop_row':
-            if type(X)!=pd.DataFrame:
+        if self.strategy=='drop_row': #NEEDS ATTENTION, may not work
+            if type(X)!=pd.DataFrame: #makes X a data frame if its not
                 X=pd.DataFrame(X)
             X=X.dropna(axis=0)  
-        X=self.T_.transform(X)
+        X=self.T_.transform(X) #binarize/impute X
         if len(self.obj_idx_)>0 and len(self.float_idx_)>0 and self.cat_approach=='together':
-            X=self.T1_.transform(X)
+            X=self.T1_.transform(X) #this is imputing all variables, which have been made floats
         
-        x_nan_count=np.isnan(X).sum() # sums by column and then across columns
-        """try:
+        x_nan_count=np.isnan(X).sum() #sums missing values by column and then across columns
+        #commented code for debugging
+        '''try:
             y_nan_count=y.isnull().sum().sum()
         except:
             y_nan_count='error'
-            self.logger.exception('error summing nulls for y')"""
+            self.logger.exception('error summing nulls for y')'''
         if x_nan_count>0:
             self.logger.info(f'x_nan_count is non-zero! x_nan_count:{x_nan_count}')
         #print(X)
         return X
-    
-    
-    

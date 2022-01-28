@@ -1,3 +1,4 @@
+#NEEDS COMMENTS
 from vb_helper import myLogger
 import pandas as pd
 import numpy as np
@@ -8,7 +9,7 @@ from scipy.cluster import hierarchy
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 #from sklearn.pipeline import make_pipeline
-import re
+import re #possibly used to search for double underscores
 
 class VBSummary(myLogger):
     def __init__(self):

@@ -160,28 +160,24 @@ class VBHelper(myLogger):
 
         return X_df,y_df #returns corrected data frames
 
-
-    def saveFullFloatXy(self):
+    def saveFullFloatXy(self): #this function is exporting the data for initial data visualization, but this stuff won't be used for eventual pipeline training
         mvh=missingValHandler({ #create an object for cleaning the covariate data
             'impute_strategy':'impute_knn5'#'pass-through'
         })
         #the next lines do data prep, like imputation and binarizing categorical variables
         mvh=mvh.fit(self.X_df)
         X_float=mvh.transform(self.X_df)
+        #create a new dataset, potentially with more columns when categorical variables were expanded
         X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
-        X_json_s=X_float_df.to_json()# _json_s is json-string
+        X_json_s=X_float_df.to_json() # _json_s is json-string
         y_json_s=self.y_df.to_json()
-        X_nan_bool_s=self.X_df.isnull().to_json()
+        X_nan_bool_s=self.X_df.isnull().to_json() #matrix locations in X of missing values so we can plot them
         
         summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
         self.summary_data=summary_data
         with open('summaryXy.json','w') as f:
-            json.dump(summary_data,f)
+            json.dump(summary_data,f) #saving a json of the summary data
         print(f'summary data saved to summaryXy.json')
-        #self.X_float_df=X_float_df
-        #self.mvh=mvh
-        #return X_float_df    
-  
 
     def setPipeDict(self,pipe_dict):
         self.original_pipe_dict=pipe_dict
@@ -256,19 +252,21 @@ class VBHelper(myLogger):
         with open(fname,'wb') as f:
             pickle.dump(cv_results,f)
         
-    def getCV(self,cv_dict=None):
+    def getCV(self,cv_dict=None): #returns a scikit cross-validator (a generator that yields a tuple that contains training and test indices)
         if cv_dict is None:
             cv_dict=self.project_CV_dict
+        #pulling the reps, folds and strategy out of a dictionary (from the GUI)
         cv_reps=cv_dict['cv_reps']
         cv_folds=cv_dict['cv_folds']
         cv_strategy=cv_dict['cv_strategy']
         if cv_strategy is None:
-            return RepeatedKFold(
+            return RepeatedKFold( #this is the default cv_strategy for Web-VB
                 n_splits=cv_folds, n_repeats=cv_reps, random_state=self.rs)
         else:
             assert type(cv_strategy) is tuple,f'expecting tuple for cv_strategy, got {cv_strategy}'
-            cv_strategy,cv_groupcount=cv_strategy
-            return regressor_q_stratified_cv(
+            cv_strategy,cv_groupcount=cv_strategy #unpacking the 2-item tuple
+            return regressor_q_stratified_cv( #https://github.com/scikit-learn/scikit-learn/issues/4757#issuecomment-694924478
+                #this is ensuring a spread (quantile or uniform bins) of y values amongst the various cv folds
                 n_splits=cv_folds, n_repeats=cv_reps, 
                 random_state=self.rs,groupcount=cv_groupcount,strategy=cv_strategy)
 
