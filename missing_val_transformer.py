@@ -57,7 +57,8 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             
         if 'impute_strategy' in self.prep_dict: #imputation strategy, drop_row is the default
             self.strategy=self.prep_dict['impute_strategy']
-        else:self.strategy='drop_row'
+        else:
+            self.strategy='drop_row'
 
         if 'cat_idx' in self.prep_dict: #getting the column numbers of the categorical variables
             self.cat_idx=self.prep_dict['cat_idx']
@@ -106,7 +107,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
 
             if self.strategy=='drop_row': #dropping rows with missing values in any variable
                 assert False, "NEEDS WORK"
-                X=X.dropna(axis=0) #overwrite X
+                #X=X.dropna(axis=0) #overwrite X #this line doesn't need to happen, because this happens at the transform step
                 numeric_T=('no_transform',none_T(),self.float_idx_)
                 categorical_T=('cat_onehot',cat_encoder,self.obj_idx_)
                 
@@ -162,20 +163,22 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             else:
                 cat_T=self.T_.transformers_[0][1]#get the first transformer tuple (b/c no cat vars), then get the second item
             if type(cat_T) is Pipeline: #categorical transformers that have two steps (binarize then impute) are defined as a Pipeline
-                num_cat_feat=cat_T['onehotencoder'].get_feature_names(cat_feat)
-                num_cat_feat__=[]
-                #this loop is finding the last underscore in each cat var name and adds another underscore
-                #TEST THIS to make sure it works with all sorts of imported categorical variable names and level names
-                for name in num_cat_feat: #concatenating the name of a cat variable to the various levels of that cat variable, for every cat variable
-                    for c_idx_l,char in enumerate(name[::-1]): #-1 makes the character iteration occur from right to left
-                        c_idx=len(name)-c_idx_l
-                        if char=='_':
-                            num_cat_feat__.append(name[:c_idx]+'_'+name[c_idx:])
-                            break
+                onehot_T=cat_T['onehotencoder']
+            else:
+                assert type(cat_T) is OneHotEncoder,f'expecting OneHotEncoder type for cat_T but got {type(cat_T)}'
+                onehot_T=cat_T
+            num_cat_feat=onehot_T.get_feature_names(cat_feat)
+            num_cat_feat__=[]
+            #this loop is finding the last underscore in each cat var name and adds another underscore
+            #TEST THIS to make sure it works with all sorts of imported categorical variable names and level names
+            for name in num_cat_feat: #concatenating the name of a cat variable to the various levels of that cat variable, for every cat variable
+                for c_idx_l,char in enumerate(name[::-1]): #-1 makes the character iteration occur from right to left
+                    c_idx=len(name)-c_idx_l 
+                    if char=='_':
+                        num_cat_feat__.append(name[:c_idx]+'_'+name[c_idx:])
+                        break
 
-                output_features.extend(num_cat_feat__)
-            else: #TEST THIS to see if it works with non-pipeline categorical transformer
-                output_features.extend(cat_T.get_feature_names(cat_feat))
+            output_features.extend(num_cat_feat__)
         return output_features
         #return featureNameExtractor(self.T_,input_features=input_features).run()
 
@@ -184,7 +187,8 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
         if self.strategy=='drop_row': #NEEDS ATTENTION, may not work
             if type(X)!=pd.DataFrame: #makes X a data frame if its not
                 X=pd.DataFrame(X)
-            X=X.dropna(axis=0)  
+            X=X.dropna(axis=0) 
+            print(f'after dropna, X.shape: {X.shape}, X.head(): {X.head()}')
         X=self.T_.transform(X) #binarize/impute X
         if len(self.obj_idx_)>0 and len(self.float_idx_)>0 and self.cat_approach=='together':
             X=self.T1_.transform(X) #this is imputing all variables, which have been made floats
