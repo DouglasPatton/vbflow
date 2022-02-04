@@ -29,7 +29,6 @@ try: #for sklearn version 0.23, 0.24 for example
     from sklearn.experimental import enable_hist_gradient_boosting  
 except:
     pass
-    
 
 class myLogger:
     def __init__(self,name=None):
@@ -48,28 +47,29 @@ class myLogger:
             datefmt='%Y-%m-%dT%H:%M:%S')
         self.logger = logging.getLogger(handlername)
 
-class BaseHelper:
-    def __init__(self):
+class BaseHelper: #wrapper/helper function for pipelines; provides lots of flexibility for pipeline fitting; for example,
+    #would allow you to create weights for each observation and potentially pass those to fit/transform/score functions
+    def __init__(self): #trivial instantiation
         pass
     def fit(self,X,y):
-        self.n_,self.k_=X.shape
-        #self.logger(f'self.k_:{self.k_}')
+        self.n_,self.k_=X.shape #dimensions of the training data
         
-        self.pipe_=self.get_pipe() 
-        try:
+        self.pipe_=self.get_pipe()  #creates a copy of the pipeline that's ready to be fit
+        try: #try/except for debugging purposes for capturing errors in fitting a pipeline
             self.pipe_.fit(X,y)
         except:
             self.logger.exception(f'error fitting pipeline')
             assert False,'halt fit'
         return self
-    def transform(self,X,y=None):
+    #three functions integral to every constructed pipeline
+    def transform(self,X,y=None): #may never be used? INVESTIGATE
         return self.pipe_.transform(X,y)
     def score(self,X,y):
         return self.pipe_.score(X,y)
     def predict(self,X):
         return self.pipe_.predict(X)
     
-    def extractParams(self,param_dict,prefix=''):
+    def extractParams(self,param_dict,prefix=''): #splits parameters into static and tunable hyperparameters
         hyper_param_dict={}
         static_param_dict={}
         for param_name,val in param_dict.items():
@@ -78,12 +78,6 @@ class BaseHelper:
             else:
                 static_param_dict[param_name]=val
         return hyper_param_dict,static_param_dict
-                
-
-    
-
-    
-    
 
 '''
 class RegularizedFlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
@@ -120,8 +114,6 @@ class RegularizedFlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
     def predict(self,X):
         return self.pipe_(self.fit_est_.x,X)
 '''
-
-
 
 class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
     def __init__(self,form='expXB',robust=False,shift=True,scale=True):
@@ -210,10 +202,6 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
     def predict(self,X):
         B=self.fit_est_.x
         return self.pipe_(B,X)
-        
-    
-            
-        
 
 class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(
@@ -267,8 +255,6 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             
         return outerpipe
 
-    
-    
 class FlexibleGLM(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(
         self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,
@@ -315,20 +301,17 @@ class FlexibleGLM(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         except:
             self.logger.exception(f'get_pipe error for flexibleGLM')
 
-
-
-
-
-class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
+class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper): #Regularized regression via LASSO(L1)/LARS; note no
+    #est_kwargs due to relative simplicity of this estimator, but this feature could potentially be added
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
-                 max_n_alphas=1000,inner_cv=None,groupcount=None,
+                 max_n_alphas=1000,inner_cv=None,groupcount=None, #max_n_alphas coming from GUI
                  bestT=False,cat_idx=None,float_idx=None):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.do_prep=do_prep
         self.max_n_alphas=max_n_alphas
         self.inner_cv=inner_cv
-        self.groupcount=groupcount
+        self.groupcount=groupcount #not used, can be deleted
         self.bestT=bestT
         self.cat_idx=cat_idx
         self.float_idx=float_idx
@@ -342,7 +325,7 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         else:
             inner_cv=self.inner_cv
         
-        steps=[('scaler',StandardScaler()),
+        steps=[('scaler',StandardScaler()), #standardizes the X values
             ('reg',LassoLarsCV(cv=inner_cv,max_n_alphas=self.max_n_alphas,normalize=False))]
         if self.bestT:
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
@@ -352,45 +335,46 @@ class L1Lars(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
-        
         return outerpipe
-    
 
-    
-class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
+class GBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper): #building a GBR object
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},inner_cv=None,bestT=False,cat_idx=None,float_idx=None,est_kwargs=None):
         myLogger.__init__(self,name='gbr.log')
         self.logger.info('starting gradient_boosting_reg logger')
-        self.do_prep=do_prep
-        self.bestT=bestT
+        self.do_prep=do_prep #whether or not to do data prep (binarize/impute)
+        self.bestT=bestT #searches for best transformation of each feature for prediction
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
-        self.inner_cv=inner_cv
+        self.inner_cv=inner_cv #suppling the cross-validator
         self.est_kwargs=est_kwargs
-        #self.pipe_=self.get_pipe() #formerly inside basehelper         
-        BaseHelper.__init__(self)
-    def get_pipe(self):
+        BaseHelper.__init__(self) #initializing the BaseHelper class to inherit from it
+
+    def get_pipe(self): #getting a GBR pipeline; this code follows a template shared by other pipeline classes
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0) #default inner_cv iterator
         else:
             inner_cv=self.inner_cv
-        if self.est_kwargs is None:
+        if self.est_kwargs is None: #non-hard-coded key word arguments for the estimator supplied at the end of the pipeline
             self.est_kwargs={'max_depth':[3,4],'n_estimators':[64,128]}
-        hyper_param_dict,gbr_params=self.extractParams(self.est_kwargs)    
+        hyper_param_dict,gbr_params=self.extractParams(self.est_kwargs) #pulling out tunable hyperparameters that will be selected
+        #by grid search and static parameters that will be passed directly to the estimator
         if not 'random_state' in gbr_params:
             gbr_params['random_state']=0
         steps=[('reg',GridSearchCV(GradientBoostingRegressor(**gbr_params),param_grid=hyper_param_dict,cv=inner_cv))]
-        if self.bestT:
-            steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
-        outerpipe= Pipeline(steps=steps)
-        if self.do_prep:
+        #** unpacks a dictionary and provides its elements to the function;
+        if self.bestT: #user asking for best feature transforms using the GUI
+            steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx))) #GET BACK TO columnBestTransformer
+            #in Doug's experience, columnBestTransformer overbuilds the pipeline and doesn't generalize well
+        outerpipe=Pipeline(steps=steps)
+        if self.do_prep: #wrapping outerpipe inside another outerpipe pipeline
             steps=[('prep',missingValHandler(prep_dict=self.prep_dict)),
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
         
-class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
+class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper): #Histogram gradient boosting class; note no
+    #est_kwargs, but this feature could potentially be added
     def __init__(self,do_prep=True,prep_dict=None):
         myLogger.__init__(self,name='HGBR.log')
         self.logger.info('starting histogram_gradient_boosting_reg logger')
@@ -409,10 +393,10 @@ class HGBR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             outerpipe=Pipeline(steps=steps)
         return outerpipe
 
-
-class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
+class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):#Elastic Net class; note no
+    #est_kwargs due to simplicity of this estimator, but this feature could potentially be added
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
-                 gridpoints=4,inner_cv=None,groupcount=None,
+                 gridpoints=4,inner_cv=None,groupcount=None, #gridpoints coming from GUI
                  float_idx=None,cat_idx=None,bestT=False):
         myLogger.__init__(self,name='enet.log')
         self.logger.info('starting enet logger')
@@ -433,12 +417,15 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         else:
             inner_cv=self.inner_cv
         gridpoints=self.gridpoints
-        #param_grid={'l1_ratio':1-np.logspace(-2,-.03,gridpoints)}
-        l1_ratio=1-np.logspace(-2,-.03,gridpoints*2)
-        n_alphas=gridpoints*5
+        #param_grid={'l1_ratio':1-np.logspace(-2,-.03,gridpoints)} #manually creating a list of gridpoints for the l1_ratio;
+        #ENet chooses these with its own internal GridSearchCV
+        l1_ratio=1-np.logspace(-2,-.03,gridpoints*2) #regularization hyperparameter for ENet; creating a list of gridpoints;
+        #multiplication by 2 somewhat arbitrary; Sci-kit learn documentation?
+        n_alphas=gridpoints*5 #another regularization hyperparameter for ENet; multiplication by 5 chosen somewhat arbitrarily
         steps=[
-            ('scaler',StandardScaler()),
-            #('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False,),param_grid=param_grid))]#rewrite to pass list of values to l1_ratio instad of gridsearccv
+            ('scaler',StandardScaler()), #StandardScaler chosen as perceived "best" option for scaling data (from Doug's experience)
+            #('reg',GridSearchCV(ElasticNetCV(cv=inner_cv,normalize=False,),param_grid=param_grid))]; commented out to instead pass
+            #list of values to l1_ratio instead of GridSearchCV
             ('reg',ElasticNetCV(cv=inner_cv,normalize=False,l1_ratio=l1_ratio,n_alphas=n_alphas))]
             
         if self.bestT:
@@ -449,7 +436,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
-
+#FINISHED HERE ON 2/4/2022
 class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  gridpoints=4,inner_cv=None,groupcount=None,
