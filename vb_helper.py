@@ -186,8 +186,7 @@ class VBHelper(myLogger):
         else:
             self.pipe_dict=pipe_dict
         self.jhash=joblib.hash([self.X_df,self.y_df,self.pipe_dict,self.project_CV_dict])    
-        
-        
+
     def setModelDict(self,pipe_dict=None):
         if pipe_dict is None:
             self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.pipe_dict.items()}

@@ -436,7 +436,7 @@ class ENet(BaseEstimator,RegressorMixin,myLogger,BaseHelper):#Elastic Net class;
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
-#FINISHED HERE ON 2/4/2022
+
 class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  gridpoints=4,inner_cv=None,groupcount=None,
@@ -459,12 +459,13 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
-        
+        # parameter grid for SVR using two parameters, C and gamma
         param_grid={
             'C':np.logspace(-2,2,self.gridpoints*2),
             'gamma':np.logspace(-2,0.5,self.gridpoints)}
         steps=[
             ('scaler',StandardScaler()),
+            # TEST removal of cache_size, tol and max_iter; probably don't need these
             ('reg',GridSearchCV(SVR(kernel='rbf',cache_size=10000,tol=1e-4,max_iter=5000),param_grid=param_grid))]
         if self.bestT:
             steps.insert(0,('xtransform',columnBestTransformer(float_k=len(self.float_idx))))
@@ -474,8 +475,6 @@ class RBFSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
                    ('post',outerpipe)]
             outerpipe=Pipeline(steps=steps)
         return outerpipe
-
-
 
 class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
@@ -493,8 +492,7 @@ class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.prep_dict=prep_dict
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
-        
-    
+
     def get_pipe(self,):
         if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
@@ -502,14 +500,16 @@ class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             inner_cv=self.inner_cv
             
         gridpoints=self.gridpoints
-        param_grid={'C':np.logspace(-2,4,gridpoints)}
+        param_grid={'C':np.logspace(-2,4,gridpoints*4)}
         steps=[
-            #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
-            ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
-            
-            ('drop_constant',dropConst()),
+            #('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain only a subset of the
+            # original variables for continued use
+            ('polyfeat',PolynomialFeatures(interaction_only=False,degree=2)), # create every 2nd-order interaction among the features
+            # including squared terms
+            ('drop_constant',dropConst()), #drops features without variance, including created interactions
             ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))),
             ('scaler',StandardScaler()),
+            # TEST removal of cache_size, tol and max_iter; probably don't need these
             ('reg',GridSearchCV(LinearSVR(random_state=0,tol=1e-4,max_iter=1000),param_grid=param_grid))]
         if self.bestT:
             steps=[steps[0],('xtransform',columnBestTransformer(float_k=len(self.float_idx))),*steps[1:]]
@@ -520,7 +520,6 @@ class LinSVR(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             outerpipe=Pipeline(steps=steps)
         return outerpipe
 
-        
 class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  gridpoints=4,inner_cv=None,groupcount=None,
@@ -537,19 +536,18 @@ class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.prep_dict=prep_dict
         #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
-    
-    
+
     def get_pipe(self,):
         if self.inner_cv is None:
             inner_cv=RepeatedKFold(n_splits=10, n_repeats=1, random_state=0)
         else:
             inner_cv=self.inner_cv
-        gridpoints=self.gridpoints
-        transformer_list=[none_T(),log_T(),logp1_T()]#,logp1_T()] # log_T()]#
+
+        # gridpoints=self.gridpoints
+        transformer_list=[none_T(),log_T(),logp1_T()]# Using 3 of many options here: none_T,logp1_T(),log_T()
         steps=[
             ('shrink_k1',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=32))), # retain a subset of the best original variables
             ('polyfeat',PolynomialFeatures(interaction_only=0,degree=2)), # create interactions among them
-            
             ('drop_constant',dropConst()),
             ('shrink_k2',shrinkBigKTransformer(selector=LassoLarsCV(cv=inner_cv,max_iter=64))), # pick from all of those options
             ('reg',LinearRegression())]
@@ -557,14 +555,11 @@ class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             steps.insert(0,('xtransform',columnBestTransformer(float_k=len(self.float_idx))))
 
         X_T_pipe=Pipeline(steps=steps)
-        #inner_cv=regressor_stratified_cv(n_splits=10,n_repeats=2,shuffle=True)
-        
-
-
+        #develop a new pipeline that allows transformation of y in addition to X, which other scikit learn transformers don't
         Y_T_X_T_pipe=Pipeline(steps=[('ttr',TransformedTargetRegressor(regressor=X_T_pipe))])
         Y_T__param_grid={
             'ttr__transformer':transformer_list,
-            'ttr__regressor__polyfeat__degree':[2],
+            'ttr__regressor__polyfeat__degree':[2], #could use other degrees here if desired
         }
         outerpipe= GridSearchCV(Y_T_X_T_pipe,param_grid=Y_T__param_grid,cv=inner_cv)
         if self.do_prep:
@@ -573,11 +568,12 @@ class LinRegSupreme(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             outerpipe=Pipeline(steps=steps)
         
         return outerpipe
-    
+
+#this class doesn't appear to be used in the project
 class NullModel(BaseEstimator,RegressorMixin):
     def __init__(self):
         pass
-    def fit(self,x,y,w=None):
+    def fit(self,x,y,w=None): # w is weights
         pass
     def predict(self,x,):
         if len(x.shape)>1:
@@ -590,13 +586,10 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.pipelist=pipelist
         self.prep_dict=self.getPrepDict(prep_dict)
         self.stacker_estimator=stacker_estimator
-        
         self.pipe_=self.get_pipe() #formerly inside basehelper
         BaseHelper.__init__(self)
-    """def fit(self,X,y):
-        self.pipe_.fit(X,y=y)
-        return self"""
-        
+
+    #TEST deletion of the following code
     def getPrepDict(self,prep_dict):
         if self.pipelist is None:
             print('empty MultiPipe!')
@@ -607,16 +600,17 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
                     return pdict['pipe_kwargs']['prep_dict']
             assert False,f'no prep_dict found in any pipedict within self.pipelist:{self.pipelist}'
         else: return prep_dict
-                
-        
+
     def get_pipe(self):
         
         try:
-            pipe_n=len(self.pipelist)
-            est_pipes=[(p[0],p[1]['pipe'](**p[1]['pipe_kwargs'])) for i,p in enumerate(self.pipelist)]
+            # calling the pipelines in self.pipelist with their keyword arguments
+            est_pipes=[(p[0],p[1]['pipe'](**p[1]['pipe_kwargs'])) for p in self.pipelist]
             final_e=self.stacker_estimator
             steps=[
                 ('prep',missingValHandler(prep_dict=self.prep_dict)),
+                #passthrough=True would add the original covariates to the final stacked regressor model in addition
+                #to the y-hats of the component pipelines
                 ('post',make_pipeline(StackingRegressor(est_pipes,passthrough=False,final_estimator=final_e,n_jobs=1)))]   
             return Pipeline(steps=steps)
         except:
@@ -626,7 +620,8 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def get_pipe_names(self):
         pipe_names=[pipe_tup[0] for pipe_tup in self.pipelist]
         return pipe_names
-    
+
+    #pulls out stand-alone pipelines from the stacked regressor
     def get_individual_post_pipes(self,names=None):
         if names is None:
             names=self.get_pipe_names()
@@ -643,31 +638,18 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
     def build_individual_fitted_pipelines(self,names=None):
         pipe_dict=self.get_individual_post_pipes(names=names)
         prep=self.get_prep()
-        fitted_ipipe_dict={}#i for individual
+        fitted_ipipe_dict={} #i used for individual
         for pname,pipe in pipe_dict.items():
             fitted_steps=[('prep',prep),('post',pipe)]
-            #fitted_ipipe_dict[pname]=CompositePostFitPipe(fitted_steps)
             fitted_ipipe_dict[pname]=FCombo(fitted_steps)
         return fitted_ipipe_dict
-        
- 
-"""class CompositePostFitPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
-    def __init__(self,fitted_steps):
-        myLogger.__init__(self,name='CompositePostFitPipe.log')
-        self.fitted_steps=fitted_steps
-        BaseHelper.__init__(self,)
-        
-        
-    def get_dpipe(self):
-         FCombo(self.fitted_steps)"""
-    
+#ENDED HERE on 2/7/2022
             
 class FCombo(BaseEstimator,RegressorMixin,myLogger):
     #Frankenstein fitted combos
     def __init__(self,fitted_steps):
         myLogger.__init__(self)
         self.fitted_steps=fitted_steps
-        
         
     def fit(self,X,y):
         assert False,'fit called! this is a fitted combo!'
