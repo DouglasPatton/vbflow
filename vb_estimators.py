@@ -147,7 +147,7 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
         Betas=B[param_idx:]
         
         y=Bshift+Bscale*(Bconst+(X@Betas))**(int(Bexponent)) 
-        return np.nan_to_num(y,nan=1e290)
+        return np.nan_to_num(y,nan=1e298)
     
     def expXB(self,B,X):
         param_idx=0
@@ -195,12 +195,8 @@ class FlexibleEstimator(BaseEstimator,RegressorMixin,myLogger):
             self.fit_est_=least_squares(self.pipe_residuals, np.ones(self.k),args=(X, y))# 
         return self
     
-    """def score(self,X,y):
-        #negative mse
-        return mean_squared_error(self.predict(X),y)"""
-    
     def predict(self,X):
-        B=self.fit_est_.x
+        B=self.fit_est_.x #.x pulls out the fitted coefficients selected by the optimizer
         return self.pipe_(B,X)
 
 class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
@@ -214,7 +210,7 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         myLogger.__init__(self,name='l1lars.log')
         self.logger.info('starting l1lars logger')
         self.do_prep=do_prep
-        self.functional_form_search=functional_form_search
+        self.functional_form_search=functional_form_search #if True, functional_form is tuned as a hyperparameter
         self.gridpoints=gridpoints
         self.inner_cv=inner_cv
         self.groupcount=groupcount
@@ -222,8 +218,7 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.cat_idx=cat_idx
         self.float_idx=float_idx
         self.prep_dict=prep_dict
-        self.flex_kwargs=flex_kwargs
-        #self.pipe_=self.get_pipe() #formerly inside basehelper         
+        self.flex_kwargs=flex_kwargs #these are passed directly to the FlexibleEstimator
         BaseHelper.__init__(self)
         
     def get_pipe(self,):
@@ -239,13 +234,12 @@ class FlexiblePipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         ]
         if self.bestT:
             steps.insert(0,'xtransform',columnBestTransformer(float_k=len(self.float_idx)))
-        
-                       
+
         pipe=Pipeline(steps=steps)
+        # selecting features. k_share allows you to choose the fraction of features that are retained using the LARS algorithm
         param_grid={'select__k_share':np.linspace(0.2,1,self.gridpoints*2)}
         if self.functional_form_search:
             param_grid['reg__form']=['powXB','expXB']#,'linear']
-            
 
         outerpipe=GridSearchCV(pipe,param_grid=param_grid)
         if self.do_prep:
@@ -270,7 +264,6 @@ class FlexibleGLM(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         self.inner_cv=inner_cv
         self.est_kwargs=est_kwargs
         self.gridpoints=gridpoints
-        #self.pipe_=self.get_pipe() #formerly inside basehelper         
         BaseHelper.__init__(self)
         
     def get_pipe(self):
@@ -282,9 +275,9 @@ class FlexibleGLM(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
                 inner_cv=self.inner_cv
             if self.est_kwargs is None:
                 self.est_kwargs={
-                    'reg__alpha':np.logspace(-5,10,self.gridpoints).tolist(),
-                    'reg__power':[0,*np.logspace(1,3,self.gridpoints-1).tolist()],
-                    'select__max_k':[4,8,32]}
+                    'reg__alpha':np.logspace(-5,10,self.gridpoints).tolist(), #investigate the ideal range for alpha
+                    'reg__power':[0,*np.logspace(1,3,self.gridpoints-1).tolist()], #investigate power values between 2 and 3
+                    'select__max_k':[4,8,32]} #maybe look to tweak using k_share
             steps=[
                 ('scaler',StandardScaler()),
                 ('select',shrinkBigKTransformer(max_k=8)),
@@ -641,36 +634,34 @@ class MultiPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         fitted_ipipe_dict={} #i used for individual
         for pname,pipe in pipe_dict.items():
             fitted_steps=[('prep',prep),('post',pipe)]
-            fitted_ipipe_dict[pname]=FCombo(fitted_steps)
+            fitted_ipipe_dict[pname]=FCombo(fitted_steps) #calling the Frankenstein fitted combo
         return fitted_ipipe_dict
-#ENDED HERE on 2/7/2022
-            
+
 class FCombo(BaseEstimator,RegressorMixin,myLogger):
-    #Frankenstein fitted combos
+    #this is built by MultiPipe and allows for re-use of the data prep step in that function
+    #typical use of FCombo is to create stand alone pipelines from the stacking regressor component pipelines; no additional
+    #fitting is required, as it has already happened when the stacking regressor was fit
     def __init__(self,fitted_steps):
         myLogger.__init__(self)
         self.fitted_steps=fitted_steps
-        
+
     def fit(self,X,y):
         assert False,'fit called! this is a fitted combo!'
-        
-    #def transform(self,X,y=None):
-    #    return self.pipe_.transform(X,y)
+
+    #score is a measure of model performance; higher is better
     #def score(self,X,y):
     #    return .score(X,y)
-    
+
     def predict(self,X):
         step_n=len(self.fitted_steps)
-        step_names=[step_tup[0] for step_tup in self.fitted_steps]
+        # step_names=[step_tup[0] for step_tup in self.fitted_steps]
         Xt=X.copy()
+        #Steps 1 to n-1 are transformers, step n is an estimator
         for s in range(0,step_n-1):
             Xt=self.fitted_steps[s][1].transform(Xt)
         return self.fitted_steps[-1][1].predict(Xt)
-        
-    
-    
-    
-    
+
+#this code would be run if you ran the python file directly from a command line
 if __name__=="__main__":
     X, y= make_regression(n_samples=300,n_features=5,noise=1)
     lrs=LinRegSupreme(do_prep=True)

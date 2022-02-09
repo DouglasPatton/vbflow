@@ -74,13 +74,11 @@ class VBHelper(myLogger):
         #self.plotter=VBPlotter()
         self.jhash=None #for storing checkpoints to speed up debugging; internal use only
 
-
     def pickleSelf(self,path=None):
         if path is None:
             path='vbhelper.pkl'
         with open(path,'wb') as f:
             pickle.dump(self,f)
-
 
     def setProjectCVDict(self,cv_folds,cv_reps,cv_strategy):
         #cv_folds is the number of cross-validation folds; typical values would be 5 or 10
@@ -94,7 +92,6 @@ class VBHelper(myLogger):
             'cv_count': cv_count,
             'cv_strategy':cv_strategy
         }
-        
 
     def setData(self,X_df,y_df): #X_df is the covariate data frame, y_df is the series of response data
         self.dep_var_name=y_df.columns.to_list()[0] #assigning a name to the response variable from y_df
@@ -124,7 +121,6 @@ class VBHelper(myLogger):
 
         #recording all other non-categorical variables
         self.float_idx=[i for i in range(X_df.shape[1]) if i not in self.cat_idx]
-        
 
     def checkData(self,X_df,y_df):
         X_dtype_dict=dict(X_df.dtypes) #converting X_df.dtypes into a dictionary that holds the data types of the covariates
@@ -199,12 +195,12 @@ class VBHelper(myLogger):
     '''def fitFinalModelDict(self,):
         for pipe_name,pipe in self.model_dict.items():
             pipe.fit(self.X_df,self.y_df)'''
-        
+    
+    #Ended here on 2/9/2022
     def runCrossValidate(self,try_load=True):
         if not os.path.exists('stash'):
             os.mkdir('stash')
-        
-       
+
         #expand_multipipes kwarg replaced with self.run_stacked
         n_jobs=self.cv_n_jobs
         cv_results={};new_cv_results={}
@@ -220,7 +216,6 @@ class VBHelper(myLogger):
                 self.cv_results=pickle.load(f)
             print('existing cv_results loaded')
             return
-            
         
         for pipe_name,model in self.model_dict.items():
             start=time()
