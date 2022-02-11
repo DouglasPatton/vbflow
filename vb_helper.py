@@ -165,7 +165,7 @@ class VBHelper(myLogger):
         X_float=mvh.transform(self.X_df)
         #create a new dataset, potentially with more columns when categorical variables were expanded
         X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
-        X_json_s=X_float_df.to_json() # _json_s is json-string
+        X_json_s=X_float_df.to_json() #_json_s is json-string
         y_json_s=self.y_df.to_json()
         X_nan_bool_s=self.X_df.isnull().to_json() #matrix locations in X of missing values so we can plot them
         
@@ -175,77 +175,69 @@ class VBHelper(myLogger):
             json.dump(summary_data,f) #saving a json of the summary data
         print(f'summary data saved to summaryXy.json')
 
-    def setPipeDict(self,pipe_dict):
+    def setPipeDict(self,pipe_dict): #stores all the info needed to create pipelines
         self.original_pipe_dict=pipe_dict
         if self.run_stacked:
-            self.pipe_dict={'stacking_reg':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples...
+            self.pipe_dict={'stacking_reg':{'pipe':MultiPipe,'pipe_kwargs':{'pipelist':list(pipe_dict.items())}}} #list...items() creates a list of tuples
         else:
             self.pipe_dict=pipe_dict
+        #creating a unique identifier for checkpoints
         self.jhash=joblib.hash([self.X_df,self.y_df,self.pipe_dict,self.project_CV_dict])    
 
-    def setModelDict(self,pipe_dict=None):
+    def setModelDict(self,pipe_dict=None): #instantiating the pipelines according to the instructions in setPipeDict
         if pipe_dict is None:
             self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in self.pipe_dict.items()}
         else: 
             self.model_dict={key:val['pipe'](**val['pipe_kwargs']) for key,val in pipe_dict.items()}
-    """def implement_pipe(self,pipe_dict=None):
-        else:
-            return pipe_dict['pipe]']"""
-    
-    '''def fitFinalModelDict(self,):
-        for pipe_name,pipe in self.model_dict.items():
-            pipe.fit(self.X_df,self.y_df)'''
 
-    #Ended here on 2/9/2022
     def runCrossValidate(self,try_load=True):
         if not os.path.exists('stash'):
             os.mkdir('stash')
 
         #expand_multipipes kwarg replaced with self.run_stacked
         n_jobs=self.cv_n_jobs
-        cv_results={};new_cv_results={}
-         #unique identifier
-        if try_load:
-            print("jhash: ",self.jhash)
-        #jhash2=joblib.hash([self.X_df,self.y_df,self.pipe_dict]) 
-        #print('jhash',jhash)
-        #print('jhash2',jhash2)
+        cv_results={} #a dictionary where cross_validate output is stored
+        new_cv_results={} #a dictionary where FCombo cross validation results are stored
+        #pkl is a pickle file
         fname=os.path.join('stash',f'cv_{self.jhash}.pkl')
         if try_load and os.path.exists(fname):
             with open(fname,'rb') as f:
                 self.cv_results=pickle.load(f)
             print('existing cv_results loaded')
             return
-        
+
         for pipe_name,model in self.model_dict.items():
             start=time()
-            model_i=cross_validate(
-                model, self.X_df, self.y_df.iloc[:,0], return_estimator=True, 
+            model_i=cross_validate( #this is SciKit Learn's cv function, which clones the full model; only the sub-models are fit here
+                model, self.X_df, self.y_df.iloc[:,0], return_estimator=True,
                 scoring=self.scorer_list, cv=self.getCV(), n_jobs=n_jobs)
             end=time()
+            #next line provides the average cross-validation scores across all sub-models
             print(f"{pipe_name},{[(scorer,np.mean(model_i[f'test_{scorer}'])) for scorer in self.scorer_list]}, runtime:{(end-start)/60} min.")
             cv_results[pipe_name]=model_i
+
         if self.run_stacked:
             for est_name,result in cv_results.items():
-                if type(result['estimator'][0]) is MultiPipe:
+                if type(result['estimator'][0]) is MultiPipe: #checking if a sub-model is a MultiPipe
                     self.logger.info(f'expanding multipipe: {est_name}')
                     new_results={}
-                    for mp in result['estimator']:
+                    for mp in result['estimator']: #mp's are multi-pipe sub-models that are created by cross_validate()
+                        #est_n and m are the two items in the tuple coming from mp.build_individual_fitted_pipelines().items()
                         for est_n,m in mp.build_individual_fitted_pipelines().items():
                             if not est_n in new_results:
                                 new_results[est_n]=[]
-                            new_results[est_n].append(m)
-                            lil_x=self.X_df.iloc[0:2]
-                            #print(f'est_n yhat test: {m.predict(lil_x)}')
+                            new_results[est_n].append(m) #m is an FCombo
+                    #this will disambiguate pipelines if they appear both inside and outside StackingRegressor()
                     for est_n in new_results:
                         if est_n in cv_results:
                             est_n+='_fcombo'
                         new_cv_results[est_n]={'estimator':new_results[est_n]}
-            cv_results={**new_cv_results,**cv_results}
+            cv_results={**new_cv_results,**cv_results} #unpacks and then re-packs two dictionaries into a new dictionary
         self.cv_results=cv_results
         with open(fname,'wb') as f:
             pickle.dump(cv_results,f)
-        
+
+#Ended here on 2/11/2022       
     def getCV(self,cv_dict=None): #returns a scikit cross-validator (a generator that yields a tuple that contains training and test indices)
         if cv_dict is None:
             cv_dict=self.project_CV_dict
