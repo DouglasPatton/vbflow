@@ -195,7 +195,7 @@ class VBHelper(myLogger):
     '''def fitFinalModelDict(self,):
         for pipe_name,pipe in self.model_dict.items():
             pipe.fit(self.X_df,self.y_df)'''
-    
+
     #Ended here on 2/9/2022
     def runCrossValidate(self,try_load=True):
         if not os.path.exists('stash'):
