@@ -237,7 +237,6 @@ class VBHelper(myLogger):
         with open(fname,'wb') as f:
             pickle.dump(cv_results,f)
 
-#Ended here on 2/11/2022       
     def getCV(self,cv_dict=None): #returns a scikit cross-validator (a generator that yields a tuple that contains training and test indices)
         if cv_dict is None:
             cv_dict=self.project_CV_dict
@@ -256,39 +255,41 @@ class VBHelper(myLogger):
                 n_splits=cv_folds, n_repeats=cv_reps, 
                 random_state=self.rs,groupcount=cv_groupcount,strategy=cv_strategy)
 
+    #making a bunch of predictions for each observation
     def predictCVYhat(self,):
         cv_reps=self.project_CV_dict['cv_reps']
         cv_folds=self.project_CV_dict['cv_folds']
-        train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df)))
+        train_idx_list,test_idx_list=zip(*list(self.getCV().split(self.X_df,self.y_df))) #unpacking train/test indices
         n,k=self.X_df.shape
-        y=self.y_df.to_numpy()[:,0]
-        data_idx=np.arange(n)
-        yhat_dict={};err_dict={};cv_y_yhat_dict={}
-        for idx,(pipe_name,result) in enumerate(self.cv_results.items()):
+        y=self.y_df.to_numpy()[:,0] #making y into a matrix with one column
+        data_idx=np.arange(n) #delete this line
+        yhat_dict={};err_dict={};cv_y_yhat_dict={} #initializing dictionaries
+        for idx,(pipe_name,result) in enumerate(self.cv_results.items()): #remove idx and enumeration
+            #adding new key value pairs (pipe_name : an empty list) to each of the following dictionaries
             yhat_dict[pipe_name]=[]
             cv_y_yhat_dict[pipe_name]=[]
-            err_dict[pipe_name]=[]
+            err_dict[pipe_name]=[] #y minus y-hat
             for r in range(cv_reps):
                 yhat=np.empty([n,])
                 err=np.empty([n,])
-                for s in range(cv_folds): # s for split
-                    m=r*cv_folds+s
-                    cv_est=result['estimator'][m]
-                    test_rows=test_idx_list[m]
-                    yhat_arr=cv_est.predict(self.X_df.iloc[test_rows])
+                for s in range(cv_folds): #s for splits/folds
+                    m=r*cv_folds+s #continous counter that counts across reps and folds
+                    cv_est=result['estimator'][m] #looking inside cross_validate output and getting the mth sub-model
+                    test_rows=test_idx_list[m] #pulling out test data for the mth sub-model
+                    yhat_arr=cv_est.predict(self.X_df.iloc[test_rows]) #making predictions (y-hats) for the mth sub-model
                     yhat[test_rows]=yhat_arr
-                    err[test_rows]=y[test_rows]-yhat[test_rows]
+                    err[test_rows]=y[test_rows]-yhat[test_rows] #computing residuals for the mth sub-model
                     cv_y_yhat_dict[pipe_name].append((self.y_df.iloc[test_rows,0].to_numpy(),yhat_arr))
                 yhat_dict[pipe_name].append(yhat)
                 err_dict[pipe_name].append(err)
                 
         #yhat_dict['y']=self.y_df.to_numpy()
-            
         self.cv_yhat_dict=yhat_dict
         #self.cv_y_yhat_dict=cv_y_yhat_dict
         self.cv_err_dict=err_dict
         
     def saveCVResults(self):
+        #using arrayDictToListDict to make lists out of numpy arrays within the specified entities
         full_results=self.arrayDictToListDict(
             {
                 'y':self.y_df.iloc[:,0].to_list(),
@@ -307,8 +308,8 @@ class VBHelper(myLogger):
         print(f'cross validation results saved to {path}')
         #print('setting plotter data')
         #self.plotter.setData(full_results)
-            
-    
+
+    #repacks numpy arrays into json friendly lists
     def arrayDictToListDict(self,arr_dict):
         assert type(arr_dict) is dict,f'expecting dict but type(arr_dict):{type(arr_dict)}'
         list_dict={}
@@ -322,36 +323,38 @@ class VBHelper(myLogger):
             else:
                 list_dict[key]=val
         return list_dict
-        
-        
+
     def buildCVScoreDict(self):
-        try: self.cv_yhat_dict
-        except:self.predictCVYhat()
+        try: self.cv_yhat_dict #this will trigger an error if self.cv_yhat_dict not found
+        except:self.predictCVYhat() #this will be triggered by any error, including typos
         cv_results=self.cv_results
         scorer_list=self.scorer_list
         cv_score_dict={}
         cv_score_dict_means={}
-        y=self.y_df.iloc[:,0]
+        y=self.y_df.iloc[:,0] #getting the y-values from a data frame (technically a data series)
         for idx,(pipe_name,result) in enumerate(cv_results.items()):
-            #cv_estimators=result['estimator']
             model_idx_scoredict={}
             for scorer in scorer_list:
                 scorer_kwarg=f'test_{scorer}'
                 #if scorer_kwarg in result:
                 #    model_idx_scoredict[scorer]=result[scorer_kwarg]
                 #else:
-                a_scorer=lambda y,yhat:get_scorer(scorer)(NullModel(),yhat,y) #b/c get_scorer wants (est,x,y)
-                score=np.array([a_scorer(y,yhat) for yhat in self.cv_yhat_dict[pipe_name]])#
+                #creating a function (a_scorer) on the fly that uses scikit learn scorers with only y and y-hat as the inputs
+                #python keyword lambda creates an anonymous inline function
+                a_scorer=lambda y,yhat:get_scorer(scorer)(NullModel(),yhat,y) #get_scorer returns a scikit learn scorer that
+                #takes three arguments (estimator,X,y); we are bypassing the internal prediction step (by using NullModel())
+                #and only giving it y-hat and y
+                score=np.array([a_scorer(y,yhat) for yhat in self.cv_yhat_dict[pipe_name]]) #score is a vector with cv_reps*cv_folds elements
                 model_idx_scoredict[scorer]=score
-            #nmodel_idx_scoredict={scorer:result[f'test_{scorer}'] for scorer in scorer_list}# fstring bc how cross_validate stores list of metrics
-            cv_score_dict[pipe_name]=model_idx_scoredict 
+            cv_score_dict[pipe_name]=model_idx_scoredict
+            #taking the mean of the scores across all cv_iterations
             model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
             cv_score_dict_means[pipe_name]=model_idx_mean_scores
+        #storing (cv_score_dict_means and cv_score_dict) as attributes makes them more globally accessible
         self.cv_score_dict_means=cv_score_dict_means
         self.cv_score_dict=cv_score_dict
-    
-   
-        
+
+#ended here on 2/14
     def viewCVScoreDict(self):
         for scorer in self.scorer_list:
             print(f'scores for scorer: {scorer}:')
