@@ -293,18 +293,18 @@ class VBHelper(myLogger):
         full_results=self.arrayDictToListDict(
             {
                 'y':self.y_df.iloc[:,0].to_list(),
-                'cv_yhat':self.cv_yhat_dict,
-                'cv_score':self.cv_score_dict,
-                'project_cv':self.project_CV_dict,
-                'cv_model_descrip':{} #not developed
+                'cv_yhat':self.cv_yhat_dict, #created by predictCVYhat
+                'cv_score':self.cv_score_dict, #created by buildCVScoreDict
+                'project_cv':self.project_CV_dict, #created by setProjectCVDict
+                'cv_model_descrip':{} #not developed; allows addition of more data without changing the API; may remove?
             }
         )
         self.full_results=full_results
-        #df=pd.DataFrame(full_results)
+        #df=pd.DataFrame(full_results); delete?; "pd" is pandas
         path='project_cv_results.json'
         with open(path,'w') as f:
             #df.to_json(f)
-            json.dump(full_results,f)
+            json.dump(full_results,f) #saving a json file
         print(f'cross validation results saved to {path}')
         #print('setting plotter data')
         #self.plotter.setData(full_results)
@@ -350,20 +350,20 @@ class VBHelper(myLogger):
             #taking the mean of the scores across all cv_iterations
             model_idx_mean_scores={scorer:np.mean(scores) for scorer,scores in model_idx_scoredict.items()}
             cv_score_dict_means[pipe_name]=model_idx_mean_scores
-        #storing (cv_score_dict_means and cv_score_dict) as attributes makes them more globally accessible
+        #storing (cv_score_dict_means and cv_score_dict) as class attributes makes them more accessible to other parts of the vb_helper object
         self.cv_score_dict_means=cv_score_dict_means
         self.cv_score_dict=cv_score_dict
 
-#ended here on 2/14
     def viewCVScoreDict(self):
         for scorer in self.scorer_list:
             print(f'scores for scorer: {scorer}:')
             for pipe_name in self.model_dict:
                 print(f'    {pipe_name}:{self.cv_score_dict_means[pipe_name][scorer]}')
     
-    def refitPredictiveModel(self, selected_model: str,  verbose: bool=False):
+    def refitPredictiveModel(self,selected_model:str,verbose:bool=False):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
+        #functionality to load/save models to speed stuff up when debugging
         pjhash=joblib.hash([self.jhash,selected_model])
         path=os.path.join('stash','predictive_model-'+pjhash+'.pkl')
         if os.path.exists(path):
@@ -374,14 +374,15 @@ class VBHelper(myLogger):
                 return
             except:
                 print(f'failed to load predictive models from {path}, fitting')
-                
-        y_df=self.y_df #changed to 1 dim below
+
+        y_df=self.y_df #data frame here, but changed to 1 dimensional series below
         X_df=self.X_df
         self.logger.info("Refitting specified models for prediction...")
         try:
-            predictive_model=(selected_model,self.model_dict[selected_model].fit(X_df,y_df.iloc[:,0]))#copy.copy(self.cv_results[name]["estimator"][indx])
+            predictive_model=(selected_model,self.model_dict[selected_model].fit(X_df,y_df.iloc[:,0]))
         except KeyError:
             pipe_i=self.original_pipe_dict[selected_model]
+            #TODO: replace "name" with "selected_model"?
             predictive_model=(name, pipe_i['pipe'](**pipe_i['pipe_kwargs']).fit(X_df,y_df.iloc[:,0]))
         except:
             self.logger.exception('error refiting predictive model')
@@ -393,6 +394,7 @@ class VBHelper(myLogger):
         with open(path,'wb') as f:
             pickle.dump(self.predictive_model,f)
 
+    #old functionality to allow weighted model averaging of fitted pipelines
     '''def setModelAveragingWeights(self):
         pipe_names=list(self.predictive_models.keys())
         model_count=len(self.predictive_models)
@@ -447,56 +449,58 @@ class VBHelper(myLogger):
             'test_results':test_results,'test_y':self.y_test
         }
         return collection
-    
+
+    #obtaining and saving predictions from new X data
     def predictandSave(self,X_predict,scorer=None,build_PI='cvplus'):
         if scorer is None:
             scorer=self.scorer_list[0]
+        #making sure predictions have informative row labels
         if not str(X_predict.index.to_list()[0])[:7].lower()=='predict':
             X_predict.index=[f'predict-{idx}' for idx in X_predict.index]
-        yhat_predict=self.predict(X_predict) 
+        yhat_predict=self.predict(X_predict) #predict with the fitted model created by refitPredictiveModel
         self.yhat_predict=yhat_predict
-        yhat_cv_predict=self.predict(X_predict,model_type='cross_validation')
+        yhat_cv_predict=self.predict(X_predict,model_type='cross_validation') #predict with cross-validation sub-models; will produce multiple yhat's
         
         if not build_PI is None:
             if build_PI.lower() in ['cv+','cvplus']:
                 prediction_interval=self.doCVPlusPI(yhat_cv_predict)
             else: assert False,f'build_PI option: {build_PI} not developed'
         else: prediction_interval=None
-        
-        
+
         predictresult={
             'yhat_predict':yhat_predict.to_json(),#json strings
             'cv_yhat_predict':[yhat_predict_i.to_json() for yhat_predict_i in yhat_cv_predict],
             'X_predict':X_predict.to_json(),
             'yhat_predict_PI':{str(build_PI):prediction_interval.to_json()},#build_PI might be "cv+",None,...?
-            'selected_model':self.predictive_model[0]} # just the name
+            'selected_model':self.predictive_model[0]} #the name of the predictive model
         path='project_prediction_results.json'
         with open(path,'w') as f:
             json.dump(predictresult,f)
         print(f'prediction results saved to {path}')
-        
+
+    #create a prediction interval for new predictions based partly on the variablity of yhat's seen for the training data through cross-validation
     def doCVPlusPI(self,yhat_cv_predict,alpha=0.05,collapse_reps='pre_mean',true_y_predict=None):
         y_train=np.array(self.full_results['y'])
+        #organizing cv_yhat_predictions into a single array with an added left-hand side dimension along which the repetition varies
         cv_yhat_train_arr=np.concatenate(
             [np.array(y_list)[None,:] for y_list in self.full_results['cv_yhat'][self.predictive_model[0]]],axis=0
             ) # dims: (n_reps,train_n)
         splitter=self.getCV()
         n_splits=self.project_CV_dict['cv_folds']
         n_reps=self.project_CV_dict['cv_reps']
-        yhat_cv_predict_arr=np.empty([n_reps,y_train.size,yhat_cv_predict[0].shape[-1]])
+        yhat_cv_predict_arr=np.empty([n_reps,y_train.size,yhat_cv_predict[0].shape[-1]]) #yhat_cv_predict[0].shape[-1] is the number of predictions being made
         r=0
         s=0
         for train_idx,test_idx in splitter.split(y_train):
             assert r<n_reps
+            #predictions are broadcast/repeated to each point in test_idx (about 20% of training n)
             yhat_cv_predict_arr[r,test_idx,:]=yhat_cv_predict[r*n_splits+s].to_numpy()
             s+=1
             if s==n_splits:
                 r+=1
                 s=0
-            
-            
-            
-            
+
+#Ended here on 2/16
         #yhat_cv_predict_arr=np.concatenate([yhat_i[None,:] for yhat_i in yhat_cv_predict],axis=0) # None adds a new dimension 
         #     that will be used for concatenating the different predictions across reps and splits dims:(n_reps*n_splits,predict_n)
         lower,upper=CVPlusPI().run(
@@ -506,8 +510,7 @@ class VBHelper(myLogger):
         df=pd.DataFrame(data={f'lowerPI-{alpha}':lower,f'upperPI-{alpha}':upper},index=yhat_cv_predict[0].index)
         #self.PIdf=df
         return df
-        
-    
+
     def predict(self, X_df_predict: pd.DataFrame,model_type:str='predictive'):
         name,est=self.predictive_model
         if model_type=='predictive':
