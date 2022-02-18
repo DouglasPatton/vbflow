@@ -1,46 +1,44 @@
-# https://www.stat.cmu.edu/~ryantibs/papers/jackknife.pdf
-# from http://www.stat.uchicago.edu/~rina/jackknife/jackknife_simulation.html
-## related: https://arxiv.org/abs/2002.09025, http://www.stat.uchicago.edu/~rina/jackknife/jackknife+-after-bootstrap_realdata.html 
+#paper: https://www.stat.cmu.edu/~ryantibs/papers/jackknife.pdf
+#code: http://www.stat.uchicago.edu/~rina/jackknife/jackknife_simulation.html
+#related work: https://arxiv.org/abs/2002.09025, http://www.stat.uchicago.edu/~rina/jackknife/jackknife+-after-bootstrap_realdata.html
+
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import RepeatedKFold
-class CVPlusPI:
-    """
-    implements Jacknnife Plus (n_splits = train_n) or Cross-Validation Plus (n_splits < train_n) by setting collapse_reps to 'drop'
-    
-    
-    """
-    @staticmethod
-    def run(y_train:np.array,cv_yhat_train:np.array,cv_yhat_predict:np.array,alpha=0.05,collapse_reps:str='pre_mean',true_y_predict=None):
-        n_reps,train_n=cv_yhat_train.shape
+
+class CVPlusPI: #implements Jacknife_Plus (n_splits=train_n,cv_test_n=1) or Cross-Validation Plus (n_splits < train_n,cv_test_n=train_n/n_splits) by setting collapse_reps to 'drop'
+    @staticmethod #no class attributes are used; lets you use CVPlusPI without instantiating an object of this class
+    def run(y_train:np.array, #the colon allows declaration of a variable type on the fly
+            cv_yhat_train:np.array,cv_yhat_predict:np.array,alpha=0.05,collapse_reps:str='pre_mean',true_y_predict=None):
+        #Doug's experience leads him to believe pre-mean and drop perform the best; probably just leave this at pre-mean
+        n_reps,train_n=cv_yhat_train.shape #yhat's from the observations withheld from each cv_sub-model
         assert y_train.shape[-1]==cv_yhat_train.shape[-1],\
         f'expecting rhs dimensions of y and cv_yhat_train to match. shapes: \
             y_train: {y_train.shape}, cv_yhat_train{cv_yhat_train.shape}'
-        cv_train_err=np.abs(y_train[None,:]-cv_yhat_train)# (cv_reps,train_n)
+        cv_train_err=np.abs(y_train[None,:]-cv_yhat_train) #dims of lhs is (cv_reps,train_n)
         
         '''n_splits=int(cv_yhat_predict.shape[0]/n_reps)
         assert cv_yhat_predict.shape[0]==n_reps*n_splits,f'n_splits should be an integer, but \
             n_splits:{n_splits} and cv_yhat_predict.shape:\
             {cv_yhat_predict.shape}, cv_yhat_train.shape:{cv_yhat_train.shape}'
         '''
-        assert cv_yhat_predict.shape[1]==train_n
         assert cv_yhat_predict.shape[0]==n_reps
-        
+        assert cv_yhat_predict.shape[1]==train_n
         predict_n=cv_yhat_predict.shape[-1]
         
-        #cv_yhat_predict=cv_yhat_predict.reshape(n_reps,n_splits,predict_n) 
+        #cv_yhat_predict=cv_yhat_predict.reshape(n_reps,n_splits,predict_n); delete?
         assert type(collapse_reps) is str
         if collapse_reps=='drop':
-            cv_yhat_predict=cv_yhat_predict[0][None,:,:] #grab first rep across 0th dim and add dim back
-            cv_train_err=cv_train_err[0][None,:] # same
-            n_reps=1 
+            cv_yhat_predict=cv_yhat_predict[0][None,:,:] #grab 0th rep (causing a loss of 1 dim) and put back the same dim
+            cv_train_err=cv_train_err[0][None,:] #same as above, but cv_train_err only has 2 dims
+            n_reps=1
         elif collapse_reps=='pre_mean':
-            cv_yhat_predict=np.mean(cv_yhat_predict,axis=0)[None,:,:] #across reps and add dim back
-            cv_train_err=np.mean(cv_train_err,axis=0)[None,:] # same
+            cv_yhat_predict=np.mean(cv_yhat_predict,axis=0)[None,:,:] #take mean across reps and add lost dim back
+            cv_train_err=np.mean(cv_train_err,axis=0)[None,:] #same as above, but cv_train_err only has 2 dims
             n_reps=1
         elif collapse_reps=='pre_median':
-            cv_yhat_predict=np.median(cv_yhat_predict,axis=0)[None,:,:] #across reps and add dim back
-            cv_train_err=np.median(cv_train_err,axis=0)[None,:] # same
+            cv_yhat_predict=np.median(cv_yhat_predict,axis=0)[None,:,:] #take median across reps and add lost dim back
+            cv_train_err=np.median(cv_train_err,axis=0)[None,:] #same as above, but cv_train_err only has 2 dims
             n_reps=1
         elif collapse_reps=='post_mean':
             pass #changes happen later
@@ -48,6 +46,7 @@ class CVPlusPI:
             pass
                 
         else:assert False,f'collapse_reps:{collapse_reps} not developed'
+
         if collapse_reps=='post_mean':
             q_n=train_n*1
             alpha_idx=int(np.ceil((q_n+1)*(1-alpha)))
@@ -56,20 +55,20 @@ class CVPlusPI:
             upper_q=np.mean(np.sort((cv_yhat_predict+cv_train_err[:,:,None]),axis=1)[:,alpha_idx-1,:],axis=0)
         else:
             q_n=train_n*n_reps
-            alpha_idx=int(np.ceil((q_n+1)*(1-alpha)))
+            alpha_idx=int(np.ceil((q_n+1)*(1-alpha))) #location of prediction interval quantile boundary values in the sorted vector of simulated prediction errors
+            #the dims (n_reps,train_n,predict_n) re-shaped into (n_reps*train_n, predict_n) and then selected to lead to (predict_n,); the comma is necessary for a 1-item tuple
             lower_q=np.sort((cv_yhat_predict-cv_train_err[:,:,None]).reshape(n_reps*train_n,predict_n),axis=0)[-alpha_idx,:]
-            #dimensions:(n_reps,n_splits,train_n,predict_n)-> (., predict_n) -> (predict_n,)
             upper_q=np.sort((cv_yhat_predict+cv_train_err[:,:,None]).reshape(n_reps*train_n,predict_n),axis=0)[alpha_idx-1,:]
-        if not true_y_predict is None:
+        if not true_y_predict is None: #if you have true y's - people testing the software
             assert true_y_predict.shape[-1]==predict_n
+            #coverage is the proportion of true y's found within the prediction intervals
             coverage=np.sum(np.ones_like(true_y_predict)[np.where((true_y_predict>lower_q) & (true_y_predict<upper_q))])/predict_n
     
             #print(f'predicted coverage bound 1-2*alpha:{1-2*alpha}, coverage:{100*np.round(coverage,6)}%')
             return lower_q,upper_q,coverage
         return lower_q,upper_q
-    
-    
-    
+
+#Ended here on 2/18; rest of this code is for testing the above code
     @staticmethod
     def make_data(train_n=15,k=4,predict_n=100,n_reps=10,n_splits=5):
         #synthetic data for testing
@@ -98,8 +97,6 @@ class CVPlusPI:
             s+=1
         return y_train,cv_yhat_train,cv_yhat_predict,true_y_predict
 
-    
-    
     @staticmethod            
     def run_comparison(collapse_options=['None','pre_mean','pre_median','post_mean','drop'],n=50,make_data_kwargs=dict(train_n=50,k=40,predict_n=1000,n_splits=5),return_results=False):
         record={c_o:[] for c_o in collapse_options}
@@ -113,7 +110,5 @@ class CVPlusPI:
         if return_results:
             return record
 
-        
-        
 if __name__=="__main__":
     CVPlusPI.run_comparison(n=100)

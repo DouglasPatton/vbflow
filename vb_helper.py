@@ -481,29 +481,29 @@ class VBHelper(myLogger):
     #create a prediction interval for new predictions based partly on the variablity of yhat's seen for the training data through cross-validation
     def doCVPlusPI(self,yhat_cv_predict,alpha=0.05,collapse_reps='pre_mean',true_y_predict=None):
         y_train=np.array(self.full_results['y'])
-        #organizing cv_yhat_predictions into a single array with an added left-hand side dimension along which the repetition varies
+        #organizing cv_yhat_sub-model_test_predictions (based on the X-values in the training data) into a single array with an added left-hand side dimension along which the repetition varies
         cv_yhat_train_arr=np.concatenate(
             [np.array(y_list)[None,:] for y_list in self.full_results['cv_yhat'][self.predictive_model[0]]],axis=0
             ) # dims: (n_reps,train_n)
         splitter=self.getCV()
         n_splits=self.project_CV_dict['cv_folds']
         n_reps=self.project_CV_dict['cv_reps']
-        yhat_cv_predict_arr=np.empty([n_reps,y_train.size,yhat_cv_predict[0].shape[-1]]) #yhat_cv_predict[0].shape[-1] is the number of predictions being made
+        yhat_cv_predict_arr=np.empty([n_reps,y_train.size,yhat_cv_predict[0].shape[-1]]) #yhat_cv_predict[0].shape[-1] is the number of predictions (new X data) being made
         r=0
         s=0
         for train_idx,test_idx in splitter.split(y_train):
             assert r<n_reps
+            #general idea is to use cv_sub-models (cv_iterations=product of folds and reps) to make predictions with new X's (yhat_cv_predict_arr)
+            #which are combined with the previously-generated cv_test_residuals (cv_yhat_train_arr, generated from the training data)
             #predictions are broadcast/repeated to each point in test_idx (about 20% of training n)
+            #For Jacknife method, there is no broadcasting; there is only one cv_test_residual for each cv_sub-model
             yhat_cv_predict_arr[r,test_idx,:]=yhat_cv_predict[r*n_splits+s].to_numpy()
             s+=1
             if s==n_splits:
                 r+=1
                 s=0
 
-#Ended here on 2/16
-        #yhat_cv_predict_arr=np.concatenate([yhat_i[None,:] for yhat_i in yhat_cv_predict],axis=0) # None adds a new dimension 
-        #     that will be used for concatenating the different predictions across reps and splits dims:(n_reps*n_splits,predict_n)
-        lower,upper=CVPlusPI().run(
+        lower,upper=CVPlusPI().run( #CVPlusPI() will return a 2-value tuple
             y_train,cv_yhat_train_arr,yhat_cv_predict_arr,
             alpha=alpha,collapse_reps=collapse_reps,true_y_predict=true_y_predict)
         #print(lower,upper)
