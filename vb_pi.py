@@ -12,9 +12,7 @@ class CVPlusPI: #implements Jacknife_Plus (n_splits=train_n,cv_test_n=1) or Cros
             cv_yhat_train:np.array,cv_yhat_predict:np.array,alpha=0.05,collapse_reps:str='pre_mean',true_y_predict=None):
         #Doug's experience leads him to believe pre-mean and drop perform the best; probably just leave this at pre-mean
         n_reps,train_n=cv_yhat_train.shape #yhat's from the observations withheld from each cv_sub-model
-        assert y_train.shape[-1]==cv_yhat_train.shape[-1],\
-        f'expecting rhs dimensions of y and cv_yhat_train to match. shapes: \
-            y_train: {y_train.shape}, cv_yhat_train{cv_yhat_train.shape}'
+        assert y_train.shape[-1]==cv_yhat_train.shape[-1], 'expecting rhs dimensions of y and cv_yhat_train to match. shapes: y_train: {y_train.shape}, cv_yhat_train{cv_yhat_train.shape}'
         cv_train_err=np.abs(y_train[None,:]-cv_yhat_train) #dims of lhs is (cv_reps,train_n)
         
         '''n_splits=int(cv_yhat_predict.shape[0]/n_reps)
@@ -45,7 +43,7 @@ class CVPlusPI: #implements Jacknife_Plus (n_splits=train_n,cv_test_n=1) or Cros
         elif collapse_reps.lower()=='none':
             pass
                 
-        else:assert False,f'collapse_reps:{collapse_reps} not developed'
+        else:assert False,'collapse_reps:{collapse_reps} not developed'
 
         if collapse_reps=='post_mean':
             q_n=train_n*1
@@ -68,17 +66,15 @@ class CVPlusPI: #implements Jacknife_Plus (n_splits=train_n,cv_test_n=1) or Cros
             return lower_q,upper_q,coverage
         return lower_q,upper_q
 
-#Ended here on 2/18; rest of this code is for testing the above code
     @staticmethod
-    def make_data(train_n=15,k=4,predict_n=100,n_reps=10,n_splits=5):
-        #synthetic data for testing
+    def make_data(train_n=15,k=4,predict_n=100,n_reps=10,n_splits=5): #synthetic data for testing
         n=train_n+predict_n
         beta=np.random.normal(size=k+1)*1
         X=np.concatenate([np.random.normal(size=(n,k)),np.ones((n,1))],axis=1)
         y=X@beta+np.random.normal(size=n)*1
         X_train=X[:train_n,:]
         y_train=y[:train_n]
-        X_predict=X[train_n:]
+        X_predict=X[train_n:,:]
         true_y_predict=y[train_n:]
         splitter=RepeatedKFold(n_splits=n_splits,n_repeats=n_reps)
         cv_yhat_train=np.empty((n_reps,train_n))
@@ -86,19 +82,19 @@ class CVPlusPI: #implements Jacknife_Plus (n_splits=train_n,cv_test_n=1) or Cros
         cv_yhat_predict=np.empty((n_reps,train_n,predict_n))
         r=0;s=0
         for cv_train_idx,cv_test_idx in splitter.split(X_train):
-
             if s==n_splits:
                 s=0
                 r+=1
             cv_model=LinearRegression().fit(X_train[cv_train_idx],y=y_train[cv_train_idx])
-            yhat_i=cv_model.predict(X_train[cv_test_idx])
+            yhat_i=cv_model.predict(X_train[cv_test_idx]) #cv_test y_hats
             cv_yhat_train[r,cv_test_idx]=yhat_i
-            cv_yhat_predict[r,cv_test_idx,:]=cv_model.predict(X_predict)
+            yhat_predict_i=cv_model.predict(X_predict) #cv_predict y_hats
+            cv_yhat_predict[r,cv_test_idx,:]=yhat_predict_i
             s+=1
         return y_train,cv_yhat_train,cv_yhat_predict,true_y_predict
 
     @staticmethod            
-    def run_comparison(collapse_options=['None','pre_mean','pre_median','post_mean','drop'],n=50,make_data_kwargs=dict(train_n=50,k=40,predict_n=1000,n_splits=5),return_results=False):
+    def run_comparison(collapse_options=['None','pre_mean','pre_median','post_mean','drop'],n=50,make_data_kwargs=dict(train_n=50,k=40,predict_n=1000,n_splits=5, n_reps=5),return_results=False):
         record={c_o:[] for c_o in collapse_options}
         for _ in range(n):
             print('.',sep='',end='')
@@ -111,4 +107,4 @@ class CVPlusPI: #implements Jacknife_Plus (n_splits=train_n,cv_test_n=1) or Cros
             return record
 
 if __name__=="__main__":
-    CVPlusPI.run_comparison(n=100)
+    CVPlusPI.run_comparison(n=10)
