@@ -17,7 +17,7 @@ class VBSummary(myLogger):
         plt.rcParams['font.size'] = '8'
         
     def setData(self,df_dict):
-        #data looks like: summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
+        #data looks like: summary_data={'full_float_X':X_json_s,'full_y':y_json_s,'X_nan_bool':X_nan_bool_s}
         self.full_X_float_df=pd.read_json(df_dict['full_float_X'])
         self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
@@ -160,21 +160,25 @@ class VBSummary(myLogger):
         
         plt.rcParams['font.size'] = '8'
         fig, (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, figsize=(12, 16),dpi=200)
+
+        #generating plot ax0
         feat_miss_count_ser=self.X_nan_bool_df.astype(np.int16).sum(axis=0)
         feat_miss_count_ser.plot.bar(ax=ax0,)
         ax0.set_title('Missing Data Counts by Feature')
         pct_missing_list=[f'{round(pct)}%' for pct in (100*feat_miss_count_ser/n).tolist()]
-        self.addAnnotations(ax0,pct_missing_list)
-        
-        row_miss_count_ser=feat_miss_count_ser=self.X_nan_bool_df.astype(np.int16).sum(axis=1)
+        self.addAnnotations(ax0,pct_missing_list) #adding % missing above the bars
+
+        #generating plot ax1
+        row_miss_count_ser=self.X_nan_bool_df.astype(np.int16).sum(axis=1)
         ax1.bar(np.arange(n),row_miss_count_ser.to_numpy(),width=1)
         ax1.set_title('Missing Data Counts by Row')
-        
-        
+
+        #generating data for ax2 and ax3
         nan_01_sum=nan_01.sum(axis=0)
         has_nan_features=nan_01_sum>0
         nan_01_hasnan=nan_01[:,has_nan_features]
-        hasnan_features=[name for i,name in enumerate(feature_names) if has_nan_features[i]] 
+        hasnan_features=[name for i,name in enumerate(feature_names) if has_nan_features[i]]
+        #add link to sci-kit learn documentation for ax3
         nan_corr=self.pearsonCorrelationMatrix(nan_01_hasnan)
         nan_corr_df=pd.DataFrame(data=nan_corr, columns=hasnan_features)
         self.nan_corr=nan_corr
@@ -201,8 +205,8 @@ class VBSummary(myLogger):
         ax3.set_yticklabels(dendro['ivl'],fontsize=6)
         ax3.set_title('Missing Data Clustering Across Features')
         fig.tight_layout()
-    
 
+# ended here on 2/24
     def addAnnotations(self,ax,notes):
         for i,p in enumerate(ax.patches):
             width = p.get_width()

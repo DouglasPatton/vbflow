@@ -508,7 +508,7 @@ class VBHelper(myLogger):
             alpha=alpha,collapse_reps=collapse_reps,true_y_predict=true_y_predict)
         #print(lower,upper)
         df=pd.DataFrame(data={f'lowerPI-{alpha}':lower,f'upperPI-{alpha}':upper},index=yhat_cv_predict[0].index)
-        #self.PIdf=df
+        #self.PIdf=df ;for debugging - allows to access the data frame in a jupyter notebook after running the code
         return df
 
     def predict(self, X_df_predict: pd.DataFrame,model_type:str='predictive'):
