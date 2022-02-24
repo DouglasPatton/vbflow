@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# other crap
+.idea/
+Untitled.ipynb
+stash/
