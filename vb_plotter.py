@@ -32,7 +32,9 @@ class VBPlotter(myLogger):
         myLogger.__init__(self)
             
     def setData(self,data_dict):
-        #data_dict looks like:  
+        #getting data from data_dict ready for visualization functions; necessary because these functions were migrated from
+        #vb_helper.py
+        #data_dict looks like:
         """{
             'y':self.y_df,
             'cv_yhat':self.cv_yhat_dict,
@@ -41,8 +43,6 @@ class VBPlotter(myLogger):
             'cv_model_descrip':None #not developed
         }"""
         self.data_dict=data_dict
-        
-            
         y=np.array(self.data_dict['y'])
         self.y=y
         self.project_CV_dict=self.data_dict['project_cv']
@@ -57,7 +57,7 @@ class VBPlotter(myLogger):
         self.cv_score_dict={key:[np.array(v) for v in val] for key,val in data_dict['cv_score'].items()}
         yhat_stack_dict=self.stackCVYhat()
         self.yhat_stack_dict=yhat_stack_dict #stack reps into a single column
-        self.y=y
+        self.y=y #Delete
         self.cv_score_dict=data_dict['cv_score']
         self.setScoreDict()
         
@@ -74,12 +74,9 @@ class VBPlotter(myLogger):
             self.ypredict=self.ypredict.loc[[loc_row]]
             self.cv_ypredict=[ser.loc[[loc_row]] for ser in self.cv_ypredict]
             self.yhat_predict_PI={nm:pidf.loc[[loc_row]] for nm,pidf in self.yhat_predict_PI.items()}
-            
-            
-        #if type(self.ypredict) is pd.Series: 
-        #    self.ypredict=self.ypredict.to_frame()
-        
 
+        #if type(self.ypredict) is pd.Series: 
+        #   self.ypredict=self.ypredict.to_frame()
 
     def plotCVYhatVsY(self,single_plot=True,include_all_cv=True,regulatory_standard=False,decision_criteria=False,ypredict=False,cv_ypredict=False,estimators='all',true_y=None,prediction_interval=False):
         #true y on horizontal axis, yhat on vertical axis
@@ -180,9 +177,8 @@ class VBPlotter(myLogger):
         fig.show()
     
     def stackCVYhat(self):
-        #makes a single column of all yhats across cv iterations for graphing
+        #makes a single column of all y-hats across cv iterations for graphing
         #returns a dictionary with model/estimator/pipeline name as the key
-
         y=self.y
         yhat_stack_dict={}
         for e,(est_name,yhat_list) in enumerate(self.cv_yhat_dict.items()):
@@ -191,6 +187,7 @@ class VBPlotter(myLogger):
         return yhat_stack_dict
     
     def setScoreDict(self):
+        #morphing cv_score_dict into scorer_score_dict, which is focused on the scoring metric, not on pipeline names
         scorer_score_dict={}
 
         for pipe_name,score_dict in self.cv_score_dict.items():

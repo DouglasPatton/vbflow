@@ -33,7 +33,7 @@ class VBSummary(myLogger):
             ax=fig.add_subplot(g,1,g_idx+1,projection='3d')
             keep_cols=self.getTopNCols(col_count,keep_cats=keep_cats)
             X_scaled_expanded=StandardScaler().fit_transform(X.loc[(slice(None),keep_cols)])
-            X_orthog=PCA(n_components=3).fit_transform(X_scaled_expanded)
+            X_orthog=PCA(n_components=3).fit_transform(X_scaled_expanded) #performing the PCA
             self.X_orthog=X_orthog
             
             sc=ax.scatter(*X_orthog.T,c=self.full_y_df.to_numpy(),cmap=cmap,s=4,marker='o',depthshade=False,alpha=0.5)
@@ -47,10 +47,9 @@ class VBSummary(myLogger):
             ax.set_ylabel('component 2')
             ax.set_zlabel('component 3')
         fig.tight_layout()
-                
-                
-    def getTopNCols(self,n_cols,keep_cats=True):        
-        
+
+    def getTopNCols(self,n_cols,keep_cats=True):
+        # finding correlations between X's and y, and then picking features with highest corr's
         try: self.spear_xy,self.r_list
         except:
             self.spear_xy=[];self.r_list=[]
@@ -71,43 +70,37 @@ class VBSummary(myLogger):
                 keep_cols.append(col)
         return keep_cols
         
-        
     def kernelDensityPie(self):
         try: self.spear_xy,self.r_list
         except: 
-            _=self.getTopNCols(1)
-        spear_xy_indexed=[
-            (np.abs(tup[0]),tup[1],i) 
-            for i,tup in enumerate(self.spear_xy)]
-        abs_r_sort,col_sort,idx_sort=zip(
-            *sorted(spear_xy_indexed,reverse=True))
-        r_sort=[self.r_list[i] for i in idx_sort]  
-            
-        
+            _=self.getTopNCols(1) #only interested in running getTopNCols, not its output
+
+        spear_xy_indexed=[(np.abs(tup[0]),tup[1],i) for i,tup in enumerate(self.spear_xy)]
+        abs_r_sort,col_sort,idx_sort=zip(*sorted(spear_xy_indexed,reverse=True)) #zip puts together multiple lists
+        r_sort=[self.r_list[i] for i in idx_sort]
         all_vars=col_sort
         float_vars,float_idx=zip(*[(name,i) for i,name in enumerate(all_vars) if not re.search('__',name)])
+        #'__' in a feature name indicates a categorical feature
+
         if len(float_vars)<len(all_vars):
             cat_vars,cat_idx_list=zip(*[(name,i) for i,name in enumerate(all_vars) if not name in float_vars])
-            
             cat_var_dict=self.mergeCatVars(cat_vars)
             cat_group_names=list(cat_var_dict.keys())
         else:
             cat_var_dict={}
+
         float_var_count=len(float_vars)
-        total_var_count=float_var_count+len(cat_var_dict)+1 #dep var too
-        
+        total_var_count=float_var_count+len(cat_var_dict)+1 #1 added for the response variable
         plot_cols=int(total_var_count**0.5)
-        plot_rows=-(-total_var_count//plot_cols) #ceiling divide
+        plot_rows=-(-total_var_count//plot_cols) #ceiling divide - plot layout stuff
         fig,axes_tup=plt.subplots(nrows=plot_rows,ncols=plot_cols,figsize=(12,12),dpi=200)
-        axes_list=[ax for axes in axes_tup for ax in axes]
-        
-        
-        
+        axes_list=[ax for axes in axes_tup for ax in axes] #flattening out a list of lists
+
         for ax_idx,ax in enumerate(axes_list):
                 
             if ax_idx<float_var_count+1:
                 if ax_idx==0:
-                    self.full_y_df.plot.density(ax=ax,c='r',ind=200)
+                    self.full_y_df.plot.density(ax=ax,c='r',ind=200) #c=color, ind=x-axis resolution
                 else:
                     name=float_vars[ax_idx-1]
                     self.full_X_float_df.loc[:,[name]].plot.density(ax=ax,c='b',ind=200)
@@ -124,7 +117,7 @@ class VBSummary(myLogger):
                 cat_shares=cat_df.sum()
                 cat_shares.name=cat_name
                 self.cat_shares=cat_shares
-                cat_shares.plot(y=cat_name,ax=ax,kind='pie',fontsize='x-small')
+                cat_shares.plot(y=cat_name,ax=ax,kind='pie',fontsize='x-small') #creating pie charts for the cat features
                 r=round(cum_r,2)
                 ax.set_title(f'cumulative abs rank correlation with y: {r}',fontsize='x-small')
                 #ax.legend(fontsize='x-small')
@@ -132,9 +125,9 @@ class VBSummary(myLogger):
                 ax.axis('off')
             #ax.text()
         fig.tight_layout()
-        
-        
+
     def mergeCatVars(self,var_names):
+        #combining the multiple levels of each feature into a single dictionary entry
         var_dict={}
         for var in var_names:
             parts=re.split('__',var)
@@ -145,8 +138,7 @@ class VBSummary(myLogger):
                 var_dict[parts[0]]=[]
             var_dict[parts[0]].append((parts[1],var))
         return var_dict
-        
-        
+
     def missingVals(self):
         n=self.X_nan_bool_df.shape[0]
         if np.sum(self.X_nan_bool_df.to_numpy().ravel())==0:
