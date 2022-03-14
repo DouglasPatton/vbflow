@@ -220,7 +220,7 @@ class logminplus1_T(BaseEstimator,TransformerMixin):
     def transform(self,X,y=None):
         return np.log(X-self.x_min_+1)
     def inverse_transform(self,X,y=None):
-        return np.exp(X)-1+self.x_min_
+        return np.nan_to_num(np.exp(X)-1+self.x_min_,nan=1e20,posinf=1e20,neginf=-1e20)
 
 class logp1_T(BaseEstimator,TransformerMixin):
     def __init__(self):

@@ -360,13 +360,13 @@ class VBHelper(myLogger):
             for pipe_name in self.model_dict:
                 print(f'    {pipe_name}:{self.cv_score_dict_means[pipe_name][scorer]}')
     
-    def refitPredictiveModel(self,selected_model:str,verbose:bool=False):
+    def refitPredictiveModel(self,selected_model:str,verbose:bool=False,try_load=True):
         # TODO: Add different process for each possible predictive_model_type
         #self.logger = VBLogger(self.id)
         #functionality to load/save models to speed stuff up when debugging
         pjhash=joblib.hash([self.jhash,selected_model])
         path=os.path.join('stash','predictive_model-'+pjhash+'.pkl')
-        if os.path.exists(path):
+        if os.path.exists(path) and try_load:
             try:
                 with open(path,'rb') as f:
                     self.predictive_model=pickle.load(f)
