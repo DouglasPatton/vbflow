@@ -3,7 +3,7 @@ from torch.optim import SGD
 from torch import Tensor,load,save,tanh
 
 from io import BytesIO
-
+from joblib import hash as jhash #because hash is reserved by python
 from sklearn.datasets import make_regression
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.pipeline import make_pipeline,Pipeline
@@ -20,8 +20,10 @@ from missing_val_transformer import missingValHandler
 from vb_estimators import myLogger
 
 class TorchRegressor(myLogger):
+    # pytorch implementation inspired by: 
+    ## https://docs.microsoft.com/en-us/archive/msdn-magazine/2019/march/test-run-neural-regression-using-pytorch
     
-    def __init__(self,epochs=100,splitter=None,checkpoint=None,hidden_layers=1,nodes_per_layer=100,learning_rate=0.01,dropout_share=0.5):
+    def __init__(self,epochs=100,splitter=None,checkpoint=None,hidden_layers=1,nodes_per_layer=100,learning_rate=0.01,dropout_share=0.5,shuffle_by_epoch=True):
         myLogger.__init__(self,name='torchregressor.log')
         self.logger.info('starting TorchRegressor logger)')
         self.splitter=splitter
@@ -31,6 +33,7 @@ class TorchRegressor(myLogger):
         self.nodes_per_layer=nodes_per_layer
         self.hidden_layers=hidden_layers
         self.dropout_share=dropout_share
+        self.shuffle_by_epoch=shuffle_by_epoch #for deterministic splitters repeated across epochs
         
         
     def get_params(self,deep=False):
@@ -68,22 +71,24 @@ class TorchRegressor(myLogger):
 
             if not self.checkpoint is None:
                 self.set_net(train=True)
-            self.net_.train()
-            i=0
-            for split_idx in self.splitter.split(X,y):
-                if type(split) is tuple:split_idx=split_idx[-1] #just using test_idx, so one round of cv is all the data
-                self.optimizer.zero_grad()
-                X_i=Tensor(X[split_idx])
-                y_i=Tensor(y[split_idx]).view(-1,1)#makes into row matrix with 1 column and automatic/appropriate (-1) number of rows.
-                loss_obj=self.loss_func(self.net_(X_i),y_i)
-                loss_obj.backward()
-                self.optimizer.step()
-                i+=1
-                #if True:#i%99==0:
-                #    print(f'split {i}',end=',')
-                #    self.logger.error(f'repetition {i}')
+        self.net_.train()
+        i=0
+        shuf_idx=np.arange(y.size)
+        if self.shuffle_by_epoch: np.random.default_rng(seed=self.epochs).shuffle(shuf_idx)
+        for split_idx in self.splitter.split(X,y):
+            if type(split) is tuple:split_idx=split_idx[-1] #just using test_idx, so one round of cv is all the data
+            self.optimizer.zero_grad()
+            X_i=Tensor(X[shuf_idx][split_idx])
+            y_i=Tensor(y[shuf_idx][split_idx]).view(-1,1)#makes into row matrix with 1 column and automatic/appropriate (-1) number of rows.
+            loss_obj=self.loss_func(self.net_(X_i),y_i)
+            loss_obj.backward()
+            self.optimizer.step()
+            i+=1
+            #if True:#i%99==0:
+            #    print(f'split {i}',end=',')
+            #    self.logger.error(f'repetition {i}')
 
-            self.save_net()
+        self.save_net()
         
     def predict(self,X):
         try:
@@ -120,8 +125,7 @@ class TorchRegressor(myLogger):
 
 
 class TorchNet(BaseEstimator,RegressorMixin,myLogger): 
-    # pytorch implementation inspired by: 
-    # https://docs.microsoft.com/en-us/archive/msdn-magazine/2019/march/test-run-neural-regression-using-pytorch
+    #
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
                  epochs=1000,batch_size=128,polynomial_degree=3,cat_idx=None,float_idx=None,inner_cv=None,checkpoint=None):
         myLogger.__init__(self,name='torchnet.log')
@@ -133,10 +137,10 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
         self.prep_dict=prep_dict
         self.epochs=epochs
         self.batch_size=batch_size
-        self.checkpoint_start=checkpoint
+        self.checkpoint_start=checkpoint #used for creating models that have been fit already, 
+        ##unlike self.checkpoint_, which stores the latest fit model (could be the start if 
+        ##one is provided and self.checkpoint_ is still None
         self.fit_counter=0 # to allow refitting/partial_fit with more data...eventually
-        #self.pipe_=self.get_pipe() #formerly inside basehelper         
-        #BaseHelper.__init__(self) #TODO: create basehelper for pytorch neural nets
     
     def fit(self,X,y=None,w=None):
         self.n,self.k=X.shape
@@ -214,34 +218,27 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
         return outerpipe
     
 class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
-    def __init__(self,pipe_caller,tune_dict=None):
+    def __init__(self,pipe_caller,tune_dict=None,memory_option='model'):#other memory_option values: 'checkpoint','disk'
         myLogger.__init__(self,name='torchtuner')
         if tune_dict is None:
             tune_dict={'hidden_layers':[1,2,3],'nodes_per_layer'=100,'epochs'=256,'tune_rounds'=5,'polynomial_degree'=[2,3],'learning_rate'=[0.1,0.01]}
+        self.tune_dict=tune_dict
+        self.tune_rounds=tune_dict.pop('tune_rounds')
     def fit(self,X,y,w=None):
         self.results_={}
-        tune_rounds=tune_dict.pop('tune_rounds')
-        kwargs=dict.fromkeys(tune_dict.keys())
+        self.setup_build_dicts(tune_dict)
         for r in range(tune_rounds):
-            while tune_dict:
-                for key,val in tune_dict.items():
-                    if type(val) is list and 
-                        if len(val)>0:
-                            kwargs[key]=val.pop()
-                            break
-                        else:tune_dict.pop(key)
-                    else:
-                        kwargs[key]=val
-                        tune_dict.pop(key)
-                        break
-                result=self.my_cross_val_score(pipe_caller,kwargs,X,y,w)
-        return self.get_results()
+            for build_dict in self.get_build_dict(r):
+                self.my_cross_val_score(pipe_caller,build_dict,X,y,w,r)
+            self.setup_next_round(r)
+        return self.get_best_from results()
     
-    def my_cross_val_score(pipe_caller,kwargs,X,y,w):
-        if 'pipe_list' in kwargs:
-            pipe_list=kwargs.pop('pipe')
+    def my_cross_val_score(pipe_caller,build_dict,X,y,w,r):
+        if 'pipe_list' in build_dict:
+            pipe_list=build_dict['pipe_list']
         else:
-            pipe_list=[pipe_caller(**kwargs) for _ in range(self.inner_cv.get_n_splits())]
+            cv_loss
+            pipe_list=None#pipe_caller(**kwargs) for _ in range(self.inner_cv.get_n_splits())]
         for i,(train_idx,test_idx) in enumerate(self.inner_cv.split(X,y,w)):
             if not w is None:
                 w_train=w[train_idx]
@@ -249,12 +246,67 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             else:
                 w_train=None
                 w_test=None
-            pipe_list[i].fit(X[train_idx],y[train_idx],w=w_train)
-            yhat=pipe_list[i].predict(X[test_idx],y[test_idx],w=w_test)
+            if not pipe_list is None:
+                pipe_i=pipe_list[i]
+            else:
+                pipe_i=pipe_caller(**build_dict['kwargs'])
+            pipe_i.fit(X[train_idx],y[train_idx],w=w_train)
+            
+                #pipe_list.append(pipe_i)
+            yhat=pipe_i.predict(X[test_idx],y[test_idx],w=w_test)
             loss=self.calculate_loss(y,yhat)
+            build_dict['cv_loss'].append((r,i,loss))
+            if self.memory_option=='model' and r==0:
+                build_dict['pipe_list'].append(pipe_i)
+
             
-            
-            
+class TorchTunerResultsTool(myLogger):
+    def __init__(self,memory_option,tune_dict,kwargs):
+        myLogger.__init__(self,name='torch_tuner_results_tool.log')
+        self.memory_option=memory_option
+        self.tune_dict=tune_dict
+        self.results_by_round=[]
+        self.tune_dict_list=None
+        self.r=0
+                 
+    def start_round_0(self,tune_dict):
+        self.tune_dict_list=self.get_tune_dicts(tune_dict)
+        
+    
+    def new_round():
+        self.r+=1
+        self.kwargs_list=self.get_next_results()
+         
+                    
+    def next_kwargs():
+        return self.kwargs_list.pop()
+                    
+    def add_result(self,result):
+        self.results_by_round[-1].append(result)
+        
+    def get_tune_dicts(self,tune_dict):
+        tune_dict_list=[]
+        kwargs=dict.fromkeys(tune_dict)
+        while tune_dict:
+            for i,(key,val) in enumerate(tune_dict.items()):
+                if type(val) is list and 
+                    if len(val)>0:
+                        kwargs[key]=val.pop()
+                        if i>0:
+                            tune_dict_list.append(kwargs.copy())
+                            break
+                    else:results_tool.tune_dict.pop(key)
+                else:
+                    kwargs[key]=val
+                    tune_dict.pop(key)
+                    if i>0:
+                        tune_dict_list.append(kwargs.copy())
+                        break
+                if i==0:
+                    tune_dict_list.append(kwargs.copy())
+        return tune_dict_list
+
+
         
         
                         
