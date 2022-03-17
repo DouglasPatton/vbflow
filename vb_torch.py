@@ -233,11 +233,10 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             self.setup_next_round(r)
         return self.get_best_from results()
     
-    def my_cross_val_score(pipe_caller,build_dict,X,y,w,r):
-        if 'pipe_list' in build_dict:
+    def my_cross_val_score(self,pipe_caller,build_dict,X,y,w,r):
+        if r>0 and 'pipe_list' in build_dict:
             pipe_list=build_dict['pipe_list']
         else:
-            cv_loss
             pipe_list=None#pipe_caller(**kwargs) for _ in range(self.inner_cv.get_n_splits())]
         for i,(train_idx,test_idx) in enumerate(self.inner_cv.split(X,y,w)):
             if not w is None:
@@ -258,6 +257,29 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             build_dict['cv_loss'].append((r,i,loss))
             if self.memory_option=='model' and r==0:
                 build_dict['pipe_list'].append(pipe_i)
+                
+    def setup_build_dicts(self):
+        tune_dict=self.tune_dict.copy()
+        build_dict_list=[]
+        kwargs=dict.fromkeys()
+        while tune_dict:
+            for i,(key,val) in enumerate(tune_dict.items()):
+                if type(val) is list and 
+                    if len(val)>0:
+                        kwargs[key]=val.pop()
+                        if i>0:
+                            build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[]})
+                            break
+                    else:tune_dict.pop(key)
+                else:
+                    kwargs[key]=val
+                    tune_dict.pop(key)
+                    if i>0:
+                        build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[]})
+                        break
+                if i==0:
+                    build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[]})
+        return build_dict_list
 
             
 class TorchTunerResultsTool(myLogger):
@@ -284,27 +306,7 @@ class TorchTunerResultsTool(myLogger):
     def add_result(self,result):
         self.results_by_round[-1].append(result)
         
-    def get_tune_dicts(self,tune_dict):
-        tune_dict_list=[]
-        kwargs=dict.fromkeys(tune_dict)
-        while tune_dict:
-            for i,(key,val) in enumerate(tune_dict.items()):
-                if type(val) is list and 
-                    if len(val)>0:
-                        kwargs[key]=val.pop()
-                        if i>0:
-                            tune_dict_list.append(kwargs.copy())
-                            break
-                    else:results_tool.tune_dict.pop(key)
-                else:
-                    kwargs[key]=val
-                    tune_dict.pop(key)
-                    if i>0:
-                        tune_dict_list.append(kwargs.copy())
-                        break
-                if i==0:
-                    tune_dict_list.append(kwargs.copy())
-        return tune_dict_list
+    
 
 
         
