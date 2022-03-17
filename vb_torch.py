@@ -221,17 +221,69 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
     def __init__(self,pipe_caller,tune_dict=None,memory_option='model'):#other memory_option values: 'checkpoint','disk'
         myLogger.__init__(self,name='torchtuner')
         if tune_dict is None:
-            tune_dict={'hidden_layers':[1,2,3],'nodes_per_layer'=100,'epochs'=256,'tune_rounds'=5,'polynomial_degree'=[2,3],'learning_rate'=[0.1,0.01]}
+            tune_dict={'hidden_layers':[1,2,3],'nodes_per_layer':100,'epochs':500,'tune_rounds':5,'cut_round':3,'polynomial_degree':[2,3],'learning_rate':[0.1,0.01]}
         self.tune_dict=tune_dict
         self.tune_rounds=tune_dict.pop('tune_rounds')
+        self.cut_round=tune_dict.pop('cut_round')
+        self.pipe_caller=pipe_caller
+        
     def fit(self,X,y,w=None):
-        self.results_={}
-        self.setup_build_dicts(tune_dict)
         for r in range(tune_rounds):
-            for build_dict in self.get_build_dict(r):
-                self.my_cross_val_score(pipe_caller,build_dict,X,y,w,r)
             self.setup_next_round(r)
-        return self.get_best_from results()
+            for build_dict in self.iter_build_dicts(r):
+                self.my_cross_val_score(self.pipe_caller,build_dict,X,y,w,r)
+            
+        self.tuned_pipe_=self.fit_best_pipe()
+        
+    def fit_best_pipe():
+        self.
+    
+    def iter_build_dicts(self,r):
+        for build_dict in self.build_dicts_:
+            if build_dict['do_train_status']:
+                yield build_dict
+    
+    def setup_next_round(self,r):
+        if r==0:
+            self.build_dicts_=[self.setup_build_dicts()]
+        else:
+            active_build_dicts_idx_list=dict.fromkeys([i for i, build_dict in enumerate(self.build_dicts_) if build_dict['do_train_status']==True])
+            stopped_this_round=[]
+            loss_list_r=[]
+            loss_list_r_lag=[]
+            for build_dict in self.build_dicts_:
+                cv_loss=[];cv_loss_lag
+                for rnd,cv_i,lss in build_dict['cv_loss']:
+                    if rnd==r-1:
+                        cv_loss.append(lss)
+                    if rnd==r-2:
+                        cv_loss_lag.append(lss)
+                loss_list_r.append(sum(cv_loss)/len(cv_loss))
+                if r>1:
+                    loss_list_r_lag.append(sum(cv_loss_lag)/len(cv_loss_lag))
+            if r>1:
+                for b_idx in range(len(loss_list_r)):
+                    if loss_list_r[b_idx]>loss_list_r_lag[b_idx]:
+                    self.build_dicts_[b_idx]['do_train_status']=False
+                    stopped_this_round.append(b_idx)
+                    
+            if r>=self.cut_round:
+                losses=[(loss_list_r[b_idx],b_idx) for b_idx in range(len(self.build_dicts_)) if b_idx in active_build_dicts_idx_list]
+                l_,b_idx_list=zip(*sorted(losses))
+                if len(b_idx_list)>1:
+                    
+                    b_idx_list=b_idx_list[:len(b_idx_list)//2]
+                for b_idx in range(len(self.build_dicts)):
+                    if not b_idx in b_idx_list:
+                        self.build_dicts[b_idx]['do_train_status']=False
+            if r==1:
+                self.best_model_=(l_[0],self.build_dicts_[b_idx_list[0]]['kwargs'])
+            if l_[0]<self.best_model_[0]:
+                    self.best_model_=(l_[0],self.build_dicts_[b_idx_list[0]]['kwargs'])
+                    
+            
+                        
+                    
     
     def my_cross_val_score(self,pipe_caller,build_dict,X,y,w,r):
         if r>0 and 'pipe_list' in build_dict:
@@ -256,7 +308,7 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             loss=self.calculate_loss(y,yhat)
             build_dict['cv_loss'].append((r,i,loss))
             if self.memory_option=='model' and r==0:
-                build_dict['pipe_list'].append(pipe_i)
+                    build_dict['pipe_list'].append(pipe_i)
                 
     def setup_build_dicts(self):
         tune_dict=self.tune_dict.copy()
@@ -268,45 +320,20 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
                     if len(val)>0:
                         kwargs[key]=val.pop()
                         if i>0:
-                            build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[]})
+                            build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[],'do_train_status':True})
                             break
                     else:tune_dict.pop(key)
                 else:
                     kwargs[key]=val
                     tune_dict.pop(key)
                     if i>0:
-                        build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[]})
+                        build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[],'do_train_status':True})
                         break
                 if i==0:
-                    build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[]})
+                    build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[],'do_train_status':True})
         return build_dict_list
 
-            
-class TorchTunerResultsTool(myLogger):
-    def __init__(self,memory_option,tune_dict,kwargs):
-        myLogger.__init__(self,name='torch_tuner_results_tool.log')
-        self.memory_option=memory_option
-        self.tune_dict=tune_dict
-        self.results_by_round=[]
-        self.tune_dict_list=None
-        self.r=0
-                 
-    def start_round_0(self,tune_dict):
-        self.tune_dict_list=self.get_tune_dicts(tune_dict)
-        
-    
-    def new_round():
-        self.r+=1
-        self.kwargs_list=self.get_next_results()
-         
-                    
-    def next_kwargs():
-        return self.kwargs_list.pop()
-                    
-    def add_result(self,result):
-        self.results_by_round[-1].append(result)
-        
-    
+   
 
 
         
