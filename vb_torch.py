@@ -127,8 +127,14 @@ class TorchRegressor(myLogger):
 class TorchNet(BaseEstimator,RegressorMixin,myLogger): 
     #
     def __init__(self,do_prep=True,prep_dict={'impute_strategy':'impute_knn5'},
-                 epochs=1000,batch_size=128,polynomial_degree=3,cat_idx=None,float_idx=None,inner_cv=None,checkpoint=None):
+                 epochs=1000,batch_size=128,cat_idx=None,float_idx=None,inner_cv=None,checkpoint=None,tune_dict=None):
         myLogger.__init__(self,name='torchnet.log')
+        if tune_dict is None:
+            tune_dict={
+                'hidden_layers':[1,2,3],'nodes_per_layer':100,
+                'epochs':500,'tune_rounds':5,'cut_round':3,
+                'max_k':[8,32]'polynomial_degree':[2,3],
+                'nystroem':False,'learning_rate':[0.1,0.01]}
         self.logger.info('starting torchnet logger')
         self.do_prep=do_prep
         self.inner_cv=inner_cv
@@ -218,10 +224,8 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
         return outerpipe
     
 class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
-    def __init__(self,pipe_caller,tune_dict=None,memory_option='model'):#other memory_option values: 'checkpoint','disk'
+    def __init__(self,pipe_caller,tune_dict,memory_option='model'):#other memory_option values: 'checkpoint','disk'
         myLogger.__init__(self,name='torchtuner')
-        if tune_dict is None:
-            tune_dict={'hidden_layers':[1,2,3],'nodes_per_layer':100,'epochs':500,'tune_rounds':5,'cut_round':3,'polynomial_degree':[2,3],'learning_rate':[0.1,0.01]}
         self.tune_dict=tune_dict
         self.tune_rounds=tune_dict.pop('tune_rounds')
         self.cut_round=tune_dict.pop('cut_round')
@@ -232,11 +236,23 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             self.setup_next_round(r)
             for build_dict in self.iter_build_dicts(r):
                 self.my_cross_val_score(self.pipe_caller,build_dict,X,y,w,r)
-            
-        self.tuned_pipe_=self.fit_best_pipe()
+        l,r,build_dict=self.best_model_
+        build_dict['kwargs']['epochs']=build_dict['kwargs']['epochs']*r
+        self.tuned_pipe_=self.pipe_caller(**build_dict['kwargs']).fit(X,y,w=w)
         
-    def fit_best_pipe():
-        self.
+    def predict(self,X):
+        return self.tuned_pipe_.predict(X)
+    
+    def get_params(self):
+        assert False, 'to do'
+        
+        
+    def set_params(self,params):
+        assert False, 'to do'
+        
+    def get_best_pipe():
+        loss,r,build_dict=self.best_model_
+        
     
     def iter_build_dicts(self,r):
         for build_dict in self.build_dicts_:
@@ -277,9 +293,9 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
                     if not b_idx in b_idx_list:
                         self.build_dicts[b_idx]['do_train_status']=False
             if r==1:
-                self.best_model_=(l_[0],self.build_dicts_[b_idx_list[0]]['kwargs'])
+                self.best_model_=(l_[0],r,self.build_dicts_[b_idx_list[0]].copy())
             if l_[0]<self.best_model_[0]:
-                    self.best_model_=(l_[0],self.build_dicts_[b_idx_list[0]]['kwargs'])
+                    self.best_model_=(l_[0],r,self.build_dicts_[b_idx_list[0]].copy())
                     
             
                         
@@ -314,23 +330,24 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
         tune_dict=self.tune_dict.copy()
         build_dict_list=[]
         kwargs=dict.fromkeys()
+        tracking_kwargs={'cv_loss':[],'do_train_status':True}
         while tune_dict:
             for i,(key,val) in enumerate(tune_dict.items()):
                 if type(val) is list and 
                     if len(val)>0:
                         kwargs[key]=val.pop()
                         if i>0:
-                            build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[],'do_train_status':True})
+                            build_dict_list.append({'kwargs':kwargs.copy(),**tracking_kwargs})
                             break
                     else:tune_dict.pop(key)
                 else:
                     kwargs[key]=val
                     tune_dict.pop(key)
                     if i>0:
-                        build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[],'do_train_status':True})
+                        build_dict_list.append({'kwargs':kwargs.copy(),**tracking_kwargs})
                         break
                 if i==0:
-                    build_dict_list.append({'kwargs':kwargs.copy(),'cv_loss':[],'do_train_status':True})
+                    build_dict_list.append({'kwargs':kwargs.copy(),**tracking_kwargs})
         return build_dict_list
 
    
