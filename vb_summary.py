@@ -21,6 +21,16 @@ class VBSummary(myLogger):
         self.full_X_float_df=pd.read_json(df_dict['full_float_X'])
         self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
+        self.cv_novelty=np.array(df_dict['cv_novelty'])
+        
+        
+    def plotNoveltyVsY(self):
+        novelty_mean=self.cv_novelty.mean(axis=1)
+        fig=plt.figure(figsize=(10,4),dpi=200)
+        ax=fig.add_subplot(1,1,1)
+        #ax.scatter(self.full_y_df.to_numpy(),novelty_mean)
+        ax.scatter(np.arange(novelty_mean.shape[0]),novelty_mean,alpha=0.7,s=1,c=self.full_y_df.to_numpy(),cmap='cool',)
+        fig.tight_layout
         
     def viewComponents(self,num_cols=[6,9],keep_cats=False):
         n=self.full_X_float_df.shape[0]

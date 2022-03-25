@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from missing_val_transformer import missingValHandler
 from vb_estimators import BaseHelper,myLogger
-
+import matplotlib.pyplot as plt
 
 
 class NoveltyPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
@@ -36,7 +36,7 @@ class NoveltyPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
             
         return outerpipe
     
-class NoveltyAssessment(myLogger):
+class NoveltyAssess(myLogger):
     def __init__(self,inner_cv=None,alpha=0.01):
         self.inner_cv=inner_cv
         self.alpha=alpha
@@ -46,14 +46,22 @@ class NoveltyAssessment(myLogger):
         if type(X) is pd.DataFrame:
             X=X.to_numpy()
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=5, n_repeats=3, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=10, n_repeats=10, random_state=0)
         else:
             inner_cv=self.inner_cv
         self.pipe_list_=[]
-        novelty_hat=np.zeros((X.shape[0],inner_cv.get_n_splits(X)),dtype=np.int8)
+        
+        cv_count=inner_cv.get_n_splits(X)
         for cv_i,(train_idx,test_idx) in enumerate(inner_cv.split(X)):
+            if cv_i==0:
+                n_splits=-(-X.shape[0]//test_idx.shape[0]) #ceiling divide
+                col_idx=0
+                novelty_hat=np.zeros((X.shape[0],cv_count//n_splits),dtype=np.int8)
+            else:
+                if cv_i%n_splits==0:
+                    col_idx+=1
             pipe=NoveltyPipe(alpha=self.alpha).fit(X[train_idx],y)
-            novelty_hat[test_idx,cv_i]=pipe.predict(X[test_idx])
+            novelty_hat[test_idx,col_idx]=pipe.predict(X[test_idx])
             self.pipe_list_.append(pipe)
         self.novelty_hat_=novelty_hat
         self.single_pipe_=NoveltyPipe(alpha=self.alpha).fit(X,y)
@@ -77,9 +85,10 @@ class NoveltyAssessment(myLogger):
     
                                    
 if __name__=="__main__":
-    X, y= make_regression(n_samples=300,n_features=5,noise=1)
-    NA=NoveltyAssessment().fit(X)
+    X, y= make_regression(n_samples=300,n_features=2,noise=10)
+    NA=NoveltyAssess().fit(X)
     print(NA.novelty_hat_.mean(axis=1))
-    print(NA.cv_predict(X+2).mean())
+    print(NA.cv_predict(X).mean())
+    
     
                                    

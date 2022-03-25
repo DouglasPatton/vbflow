@@ -128,6 +128,7 @@ class missingValHandler(BaseEstimator,TransformerMixin,myLogger):
             if self.strategy.lower()=="iterativeimputer": #uses an iterative imputer - MICE
                 #default is Bayesian Ridge Regressor, but that stores way too much info; seems like overkill; switched to linear regression
                 #values for max_iter and tol were specified here to ascertain why disk space storage was so large
+                #numeric_T=('num_imputer', IterativeImputer(estimator=GradientBoostingRegressor(n_estimators=25),max_iter=10,tol=.01),self.float_idx_)
                 numeric_T=('num_imputer', IterativeImputer(estimator=LinearRegression(),max_iter=10,tol=.01),self.float_idx_)
                 cat_imputer=make_pipeline(SimpleImputer(strategy='most_frequent'),cat_encoder)
                 categorical_T=('cat_imputer',cat_imputer,self.obj_idx_)

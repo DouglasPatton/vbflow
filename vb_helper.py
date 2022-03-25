@@ -16,6 +16,7 @@ from vb_estimators import MultiPipe,FCombo,NullModel
 from missing_val_transformer import missingValHandler
 from vb_plotter import VBPlotter
 from vb_pi import CVPlusPI
+from vb_novelty import NoveltyAssess
 import json,pickle
 import joblib
 import sys
@@ -97,10 +98,12 @@ class VBHelper(myLogger):
         self.dep_var_name=y_df.columns.to_list()[0] #assigning a name to the response variable from y_df
         X_df,y_df=self.checkData(X_df,y_df) #checkData function call
         shuf=np.arange(y_df.shape[0]) #create an array (0 to the number of observations-1) to be used for shuffling the data
+        self.shuf=shuf #to unshuffle later
         if self.shuffle:
             seed=self.rs #rs is the previously stored random seed
             rng = np.random.default_rng(seed) #creating the random number generator
             rng.shuffle(shuf) #shuffling the shuf array using the random number generator
+            self.shuf=shuf #to allow reversal of shuffling
             X_df=X_df.iloc[shuf] #shuffling the X_df data
             y_df=y_df.iloc[shuf] #shuffling the y_df data
 
@@ -158,18 +161,22 @@ class VBHelper(myLogger):
 
     def saveFullFloatXy(self): #this function is exporting the data for initial data visualization, but this stuff won't be used for eventual pipeline training
         mvh=missingValHandler({ #create an object for cleaning the covariate data
-            'impute_strategy':'impute_knn5'#'pass-through'
+            'impute_strategy':"iterativeimputer"#'pass-through'
         })
         #the next lines do data prep, like imputation and binarizing categorical variables
-        mvh=mvh.fit(self.X_df)
-        X_float=mvh.transform(self.X_df)
+        unshuf=np.empty(self.X_df.shape[0])
+        unshuf[self.shuf]=np.arange(self.X_df.shape[0])
+        X_df_start_order=self.X_df.iloc[unshuf]
+        y_df_start_order=self.y_df.iloc[unshuf]
+        mvh=mvh.fit(X_df_start_order)
+        X_float=mvh.transform(X_df_start_order)
         #create a new dataset, potentially with more columns when categorical variables were expanded
         X_float_df=pd.DataFrame(data=X_float,columns=mvh.get_feature_names(input_features=self.X_df.columns.to_list()))
         X_json_s=X_float_df.to_json() #_json_s is json-string
-        y_json_s=self.y_df.to_json()
-        X_nan_bool_s=self.X_df.isnull().to_json() #matrix locations in X of missing values so we can plot them
-        
-        summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s} 
+        y_json_s=y_df_start_order.to_json()
+        X_nan_bool_s=X_df_start_order.isnull().to_json() #matrix locations in X of missing values so we can plot them
+        cv_novelty=NoveltyAssess().fit(X_float).novelty_hat_
+        summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s,'cv_novelty':cv_novelty.tolist()} 
         self.summary_data=summary_data
         with open('summaryXy.json','w') as f:
             json.dump(summary_data,f) #saving a json of the summary data
