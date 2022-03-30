@@ -1,7 +1,7 @@
 import pandas as pd
 import torch.nn as nn
 from torch.optim import SGD
-from torch import Tensor,load,save,tanh,set_num_threads
+from torch import Tensor,load,save,tanh,set_num_threads,no_grad
 import numpy as np
 from io import BytesIO
 from joblib import hash as jhash #because hash is reserved by python
@@ -23,11 +23,11 @@ from vb_estimators import myLogger
 
 
 
-class TorchRegressor(myLogger):
+class TorchRegressor(BaseEstimator,RegressorMixin,myLogger):
     # pytorch implementation inspired by: 
     ## https://docs.microsoft.com/en-us/archive/msdn-magazine/2019/march/test-run-neural-regression-using-pytorch
     
-    def __init__(self,epochs=1500,splitter=None,checkpoint=None,hidden_layers=2,nodes_per_layer=100,momentum=0.1,learning_rate=0.01,dropout_share=0.1,shuffle_by_epoch=True,train_noise=False,batch_size=64,):
+    def __init__(self,epochs=500,splitter=None,checkpoint=None,hidden_layers=1,nodes_per_layer=100,momentum=0.1,learning_rate=0.01,dropout_share=0.1,shuffle_by_epoch=True,train_noise=False,batch_size=64,set_net_fit=False):
         myLogger.__init__(self,name='torchregressor.log')
         self.logger.info('starting TorchRegressor logger)')
         self.splitter=splitter
@@ -41,11 +41,15 @@ class TorchRegressor(myLogger):
         self.train_noise=train_noise
         self.batch_size=batch_size
         self.momentum=momentum
+        self.set_net_fit=set_net_fit
         
         
     def get_params(self,deep=False):
-        return dict(splitter=self.splitter,checkpoint=self.checkpoint,epochs=self.epochs,learning_rate=self.learning_rate,
-                    nodes_per_layer=self.nodes_per_layer,hidden_layers=self.hidden_layers,dropout_share=self.dropout_share,batch_size=self.batch_size,train_noise=self.train_noise,momentum=self.momentum)
+        return dict(
+            splitter=self.splitter,checkpoint=self.checkpoint,epochs=self.epochs,
+            learning_rate=self.learning_rate,nodes_per_layer=self.nodes_per_layer,
+            hidden_layers=self.hidden_layers,dropout_share=self.dropout_share,batch_size=self.batch_size,
+            train_noise=self.train_noise,momentum=self.momentum,set_net_fit=self.set_net_fit)
                     
     def set_params(self,p_dict,deep=False):
         self.splitter=p_dict['splitter']
@@ -58,9 +62,10 @@ class TorchRegressor(myLogger):
         self.batch_size=p_dict['batch_size']
         self.train_noise=p_dict['train_noise']
         self.momentum=p_dict['momentum']
+        self.set_net_fit=p_dict['set_net_fit']
         
     def fit(self,X,y=None,w=None):
-        set_num_threads(15)
+        set_num_threads(4)
         assert not y is None
         try:
             self.net_
@@ -79,7 +84,11 @@ class TorchRegressor(myLogger):
             self.net_=nn.Sequential(*layers,nn.Linear(width,1))
             self.optimizer=SGD(self.net_.parameters(),lr=self.learning_rate,momentum=self.momentum)
             self.loss_func=nn.MSELoss()
-
+            if self.set_net_fit:
+                assert not self.checkpoint is None
+                self.set_net(train=False)
+                self.checkpoint_=self.checkpoint
+                return self
             if not self.checkpoint is None:
                 self.set_net(train=True)
         if self.train_noise:
@@ -114,7 +123,10 @@ class TorchRegressor(myLogger):
             #    self.logger.error(f'repetition {i}')
 
         self.save_net()
-        
+        self.checkpoint_=self.checkpoint
+        #print(self.checkpoint_)
+        return self
+
     def predict(self,X):
         try:
             self.net_
@@ -122,21 +134,29 @@ class TorchRegressor(myLogger):
             assert not self.checkpoint is None,f'TorchRegressor model has not been trained yet!!!'
             self.set_net(train=False)
         self.net_.eval()
-        
-        return self.net_(Tensor(X)).detach().numpy()
+        with no_grad():
+            return self.net_(Tensor(X)).detach().numpy()
             
             
     def set_net(self,train=False):
-        #check_stream=BytesIO().write(self.checkpoint).seek(0)
-        #checkpoint_dict=torch.load(check_stream)
-        checkpoint_dict=self.checkpoint
-        print('!!!!!!!!!!loading torch from state_dict!!!!!!!!!!!!!')
-        self.net_.load_state_dict(checkpoint_dict['model_state_dict'])
-        if train:
-            self.optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
-            self.epochs+=checkpoint_dict['epoch']
+        try:
+            #check_stream=BytesIO().write(self.checkpoint).seek(0)
+            #checkpoint_dict=torch.load(check_stream)
+            checkpoint_dict=self.checkpoint
+            self.checkpoint_=self.checkpoint
+            print('!!!!!!!!!!loading torch from state_dict!!!!!!!!!!!!!')
+            self.net_.load_state_dict(checkpoint_dict['model_state_dict'])
+            if train:
+                assert self.set_net_fit is False
+                self.optimizer.load_state_dict(checkpoint_dict['optimizer_state_dict'])
+                self.epochs+=checkpoint_dict['epoch']
+        except: 
+            print(format_exc())
+            print(checkpoint_dict)
+            assert False
         
     def save_net(self,):
+        self.net_.eval()
         checkpoint_dict={
             'model_state_dict':self.net_.state_dict(),
             'optimizer_state_dict':self.optimizer.state_dict(),
@@ -148,6 +168,7 @@ class TorchRegressor(myLogger):
         #byte_stream.seek(0)
         #self.checkpoint=byte_stream.read()
             #https://pytorch.org/tutorials/recipes/recipes/saving_and_loading_a_general_checkpoint.html#save-the-general-checkpoint
+        #print(f'checkpoint saved. checkpoint_dict: {checkpoint_dict}')
         self.checkpoint=checkpoint_dict
 
 
@@ -177,11 +198,11 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
         try:
             if self.tune_dict is None:
                 self.tune_dict={
-                    'hidden_layers':[1,2],'nodes_per_layer':[100],
-                    'epochs':50,'tune_rounds':15,'cut_round':2,
-                    'max_k':[8,64],'polynomial_degree':[1,2],
+                    'hidden_layers':[0,1],'nodes_per_layer':[80],
+                    'epochs':[50],'tune_rounds':10,'cut_round':1,
+                    'max_k':50,'polynomial_degree':[2,3],
                     'nystroem':False,'learning_rate':[0.01],
-                    'momentum':[0.2,],'batch_size':64,'train_noise':[True,False]}
+                    'momentum':[0.8],'batch_size':64,'train_noise':[True],'steps_per_round':1}
             self.n,self.k=X.shape
             assert not y is None
 
@@ -204,11 +225,17 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
                 self.pipe_.fit(X,y)
             except: assert False,format_exc()
 
-
-            if self.do_prep:
-                self.checkpoint_=self.pipe_['post'].tuned_pipe_['reg'].regressor_.checkpoint
+            if self.do_tune:
+                
+                if self.do_prep:
+                    self.checkpoint_=self.pipe_['post'].best_model_[-1] #checkpoint list
+                else:
+                    self.checkpoint_=self.pipe_.best_model_[-1]
             else:
-                self.checkpoint_=self.pipe_['reg'].regressor_.tuned_pipe_.checkpoint
+                if self.do_prep:
+                    self.checkpoint_=self.pipe_['post']['reg'].regressor_.checkpoint
+                else:
+                    self.checkpoint_=self.pipe_['reg'].regressor_.checkpoint
             return self
         except:
             self.logger.exception(f'outer catch')
@@ -250,7 +277,7 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
         try:
             k_share=options_dict.pop('k_share')
         except:
-            k_share=0.5
+            k_share=0.8
         try:
             max_k=options_dict.pop('max_k')
         except:
@@ -278,7 +305,13 @@ class TorchNet(BaseEstimator,RegressorMixin,myLogger):
         return outerpipe
         
         
-        
+class AvgPipe(BaseEstimator,RegressorMixin):
+    def __init__(self,pipe_list):
+        self.pipe_list=pipe_list
+    def fit(self,X,y=None):
+        return self
+    def predict(self,X):
+        return np.concatenate([pipe.predict(X)[:,None] for pipe in self.pipe_list],axis=1).mean(axis=1)
         
     
 class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
@@ -287,22 +320,61 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
         self.tune_dict=tune_dict
         self.pipe_caller=pipe_caller
         self.memory_option=memory_option
+        self.keep_going=True
+        
     def fit(self,X,y,w=None):
+        
+        self.best_model_=None
         self.tune_rounds_=self.tune_dict.pop('tune_rounds')
         self.cut_round_=self.tune_dict.pop('cut_round')
+        self.steps_per_round=self.tune_dict.pop('steps_per_round')
+        
         for r in range(self.tune_rounds_):
+            if not self.keep_going:break
             self.setup_next_round(r)
             for build_dict in self.iter_build_dicts(r):
                 self.my_cross_val_score(self.pipe_caller,build_dict,X,y,w,r)
-        l,r,build_dict=self.best_model_
-        build_dict['kwargs']['epochs']=build_dict['kwargs']['epochs']*r
-        self.tuned_pipe_=self.pipe_caller(options_dict=build_dict['kwargs']).fit(X,y)
-        return self.tuned_pipe_
+        l,r,s,build_dict,checkpoint_list=self.best_model_
+        #build_dict['kwargs']['epochs']=build_dict['kwargs']['epochs']*(r*self.steps_per_round+s)
+        self.tuned_pipe_=AvgPipe(build_dict['pipe_list']).fit(X,y)
+        #self.tuned_pipe_=self.pipe_caller(options_dict=build_dict['kwargs']).fit(X,y)
+        #self.tuned_pipe_=self.merge_pipes(build_dict).fit(X,y)
+        return self
+    
+    
+    def merge_pipes(self,build_dict):
+        assert 'pipe_list' in build_dict
+        checkpoints=[pipe['reg'].regressor_.checkpoint_['model_state_dict'] for pipe in build_dict['pipe_list']]
+        m=len(checkpoints)
+        new_checkpoint=dict.fromkeys(checkpoints[0])
+        
+        for key in list(new_checkpoint.keys()):
+            try:
+                new_checkpoint[key]=1/m*sum([ch[key] for ch in checkpoints])
+            except:
+                print(key,[ch[key] for ch in checkpoints])
+                assert False,format_exc()
+        
+        
+        merged_pipe=self.pipe_caller(options_dict={**build_dict['kwargs'],'checkpoint':{'model_state_dict':new_checkpoint},'set_net_fit':True})
+        
+        return merged_pipe             
+            
+                     
+                     
+                         
+                             
         
     def predict(self,X):
-        return self.tuned_pipe_.predict(X)
+        try:
+            yhat=self.tuned_pipe_.predict(X)
+        except:
+            self.logger.exception(f'error predicting. nan-count: {np.isnan(X).sum()} X:{X}')
+          
+            assert False
+        return yhat
     
-    def get_params(self):
+    def get_params(self,deep=False):
         p_dict={}
         p_dict['tune_dict']=self.tune_dict
         p_dict['pipe_caller']=self.pipe_caller
@@ -314,8 +386,6 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
         self.pipe_caller=p_dict['pipe_caller']
         self.memory_option=p_dict['memory_option']
         
-    def get_best_pipe():
-        loss,r,build_dict=self.best_model_
         
     
     def iter_build_dicts(self,r):
@@ -328,49 +398,75 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
         if r==0:
             self.build_dicts_=self.setup_build_dicts()
         else:
+            
             #stopped_this_round=[]
             loss_dict_r={}
             loss_dict_r_lag={}
             loss_dict_r_lag2={}
+            cols=['lss','rnd','step','cv_i']
+            active_list=[]
+            not_stopped_count=0
+            imax=self.steps_per_round*r-1
             for b_idx,build_dict in enumerate(self.build_dicts_):
                 if not build_dict['keep_training']:continue
+                not_stopped_count+=1
+                '''
+                loss_df=pd.DataFrame(build_dict['cv_loss'],columns=cols)
+                loss_df=loss_df[loss_df['rnd']>=r-1] #drop all but last 2 rounds
+                avg_loss_df=loss_df.loc[:,cols[:-1]].groupby(['rnd','step']).mean()
+                avg_loss_drop=avg_loss_df.sort_values(['rnd','step']).groupby(['rnd'])['lss'].diff()
+                if avg_loss_drop'''
+                
+                
                 cv_loss=[];cv_loss_lag=[];cv_loss_lag2=[]
-                for rnd,cv_i,lss in build_dict['cv_loss']:
-                    if rnd==r-1:
-                        cv_loss.append(lss)
-                    if rnd==r-2:
-                        cv_loss_lag.append(lss)
-                    if rnd==r-3:
-                        cv_loss_lag2.append(lss)
-                loss_dict_r[b_idx]=sum(cv_loss)/len(cv_loss)
-                if r>2:
-                    loss_dict_r_lag[b_idx]=sum(cv_loss_lag)/len(cv_loss_lag)
-                    loss_dict_r_lag2[b_idx]=sum(cv_loss_lag2)/len(cv_loss_lag2)
-            if r>2:#stop training models that are getting worse
-                for b_idx in list(loss_dict_r.keys()):#list b/c modifying the dict
-                    if loss_dict_r[b_idx]>loss_dict_r_lag[b_idx] and loss_dict_r_lag[b_idx]>loss_dict_r_lag2[b_idx]:
-                        #print(f'dropping b_idx:{b_idx} with rising loss: {loss_dict_r[b_idx]}>{loss_dict_r_lag[b_idx]}')
-                        self.build_dicts_[b_idx]['keep_training']=False
-                        loss_dict_r.pop(b_idx)
+                cv_loss_lag_dict={}
+                for lss,rnd,step,cv_i,_ in build_dict['cv_loss']: #(loss,r,s,i,checkpoint)
+                    #if rnd<r-3:continue
+                    i=rnd*self.steps_per_round+step
+                    if i<imax-self.steps_per_round*2:continue
+                    if not (rnd,step) in cv_loss_lag_dict:
+                        cv_loss_lag_dict[(rnd,step)]=[lss]
+                    else:
+                        cv_loss_lag_dict[(rnd,step)].append(lss)
+                for key,val in cv_loss_lag_dict.items():
+                    cv_loss_lag_dict[key]=sum(val)/len(val)
+                iter_sorted=sorted([(key[0]*self.steps_per_round+key[1],key,val) for key,val in cv_loss_lag_dict.items()])
+                if len(iter_sorted)>2 and iter_sorted[-1][-1]>iter_sorted[-2][-1] and iter_sorted[-1][-1]>iter_sorted[-3][-1]:
+                    self.build_dicts_[b_idx]['keep_training']=False
+                    #loss_dict_r.pop(b_idx)
                         #stopped_this_round.append(b_idx)
+                else:
+                    loss_sorted=sorted([(val,key) for key,val in cv_loss_lag_dict.items()])
+                    active_list.append((*loss_sorted[0],b_idx))
                     
-            
-            losses=[(loss,b_idx) for b_idx,loss in loss_dict_r.items()]
+            losses=sorted(active_list)
             print(f'round: {r} losses: {losses}')
             if len(losses)==0:
                 print(f'all models cut')
+                self.keep_going=False
                 return
-            l_,b_idx_list=zip(*sorted(losses))
+            #l_,key_idx_list,b_idx_list=zip(*sorted(losses))
             if r>=self.cut_round_:
-                if len(b_idx_list)>1: 
-                    b_idx_list=b_idx_list[:int(len(b_idx_list)*0.9)]
-                for b_idx in range(len(self.build_dicts_)):
-                    if not b_idx in b_idx_list:
-                        self.build_dicts_[b_idx]['keep_training']=False
-            if r==1:
-                self.best_model_=(l_[0],r,self.build_dicts_[b_idx_list[0]].copy())
-            if l_[0]<self.best_model_[0]:
-                    self.best_model_=(l_[0],r,self.build_dicts_[b_idx_list[0]].copy())
+                if len(losses)>1: 
+                    cut=-(-len(losses)//2)#ceiling divide
+                    if len(losses)>cut:
+                        for tup in losses[cut:]:
+                            b_idx=tup[-1]
+                            self.build_dicts_[b_idx]['keep_training']=False
+                        #b_idx_list=b_idx_list[:int(len(b_idx_list)*0.5)]
+                    #for b_idx in loss_dict_r.keys():
+                    #    if not b_idx in b_idx_list:
+                    #        print(f'dropping model {b_idx} with loss: {loss_dict_r[b_idx]}')
+                    #        self.build_dicts_[b_idx]['keep_training']=False
+            best_model_r_tup=losses[0]
+            best_loss=best_model_r_tup[0]
+            best_r,best_s=best_model_r_tup[1]
+            best_idx=best_model_r_tup[2]
+            _,best_checkpoints=zip(*sorted([(cv_i,tup[3]) for tup in self.build_dicts_[best_idx]['cv_loss'] if tup[1]==best_r and tup[2]==best_s]))
+            if self.best_model_ is None:
+                self.best_model_=(best_loss,best_r,best_s,deepcopy(self.build_dicts_[best_idx]),deepcopy(best_checkpoints))
+            if best_loss<self.best_model_[0]:
+                    self.best_model_=(best_loss,best_r,best_s,deepcopy(self.build_dicts_[best_idx]),deepcopy(best_checkpoints))
         if r>0:print(f'tt has setup round : {r} and the best model loss so far is: {self.best_model_[0]}')
                     
             
@@ -388,8 +484,9 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             pipe_list=None#pipe_caller(**kwargs) for _ in range(self.inner_cv.get_n_splits())]
         splitter=RepeatedKFold(
             n_splits=5,n_repeats=1,random_state=r)
+        print(f'r:{r}',end='. ')
         for i,(train_idx,test_idx) in enumerate(splitter.split(X,y,w)):
-            if i==2:break
+            #if i==3:break
             if not w is None:
                 w_train=w[train_idx]
                 w_test=w[test_idx]
@@ -399,20 +496,25 @@ class TorchTuner(BaseEstimator,RegressorMixin,myLogger):
             if not pipe_list is None:
                 pipe_i=pipe_list[i]
             else:
-                print('creating new pipeline')
+                #print('creating new pipeline')
                 pipe_i=pipe_caller(options_dict=build_dict['kwargs'])
-            print(f'starting fit cv i: {i}, in round: {r}.')
-            pipe_i.fit(X[train_idx],y[train_idx])
-            
-                #pipe_list.append(pipe_i)
-            yhat=pipe_i.predict(X[test_idx])
-            try:
-                loss=mean_squared_error(y[test_idx],yhat)
-            except:
-                loss=99999
-            build_dict['cv_loss'].append((r,i,loss))
+            #print(f'starting fit cv i: {i}, in round: {r}.')
+            print(f'{i}',end=',')
+            xi=X[train_idx];yi=y[train_idx]
+            xj=X[test_idx];yj=y[test_idx]
+            for s in range(self.steps_per_round):     
+                pipe_i.fit(xi,yi)
+                #print(pipe_i['reg'].regressor.get_checkpoint())
+                    #pipe_list.append(pipe_i)
+                yhat=pipe_i.predict(xj)
+                try:
+                    loss=mean_squared_error(yj,yhat)
+                except:
+                    loss=99999
+                build_dict['cv_loss'].append((loss,r,s,i,pipe_i['reg'].regressor_.checkpoint_))
             if self.memory_option=='model' and r==0:
                 build_dict['pipe_list'].append(pipe_i)
+        #print('bd_checkpoint',pipe_i['reg'].regressor_.checkpoint_)
                 
     def setup_build_dicts(self):
         tune_dict=deepcopy(self.tune_dict)
