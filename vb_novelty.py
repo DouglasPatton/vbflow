@@ -37,16 +37,17 @@ class NoveltyPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         return outerpipe
     
 class NoveltyAssess(myLogger):
-    def __init__(self,inner_cv=None,alpha=0.05):
+    def __init__(self,prep_dict,inner_cv=None,alpha=0.05):
         self.inner_cv=inner_cv
         self.alpha=alpha
+        self.prep_dict=prep_dict
         myLogger.__init__(self,name='novelty_assessment.log')
         
     def fit(self,X,y=None):
         if type(X) is pd.DataFrame:
             X=X.to_numpy()
         if self.inner_cv is None:
-            inner_cv=RepeatedKFold(n_splits=10, n_repeats=10, random_state=0)
+            inner_cv=RepeatedKFold(n_splits=5, n_repeats=3, random_state=0)
         else:
             inner_cv=self.inner_cv
         self.pipe_list_=[]
@@ -60,7 +61,7 @@ class NoveltyAssess(myLogger):
             else:
                 if cv_i%n_splits==0:
                     col_idx+=1
-            pipe=NoveltyPipe(alpha=self.alpha).fit(X[train_idx],y)
+            pipe=NoveltyPipe(alpha=self.alpha,prep_dict=self.prep_dict).fit(X[train_idx],y)
             novelty_hat[test_idx,col_idx]=pipe.predict(X[test_idx])
             self.pipe_list_.append(pipe)
         self.novelty_hat_=novelty_hat
