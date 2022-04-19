@@ -37,7 +37,7 @@ class NoveltyPipe(BaseEstimator,RegressorMixin,myLogger,BaseHelper):
         return outerpipe
     
 class NoveltyAssess(myLogger):
-    def __init__(self,inner_cv=None,alpha=0.01):
+    def __init__(self,inner_cv=None,alpha=0.05):
         self.inner_cv=inner_cv
         self.alpha=alpha
         myLogger.__init__(self,name='novelty_assessment.log')

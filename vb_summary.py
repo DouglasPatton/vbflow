@@ -8,6 +8,7 @@ from scipy.stats import spearmanr,pearsonr
 from scipy.cluster import hierarchy
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+from sklearn.linear_model import ElasticNetCV, LinearRegression, Lars
 #from sklearn.pipeline import make_pipeline
 import re #possibly used to search for double underscores
 
@@ -25,12 +26,24 @@ class VBSummary(myLogger):
         
         
     def plotNoveltyVsY(self):
+        plot_count=3
+        y=self.full_y_df.to_numpy()
+        n=y.shape[0]
         novelty_mean=self.cv_novelty.mean(axis=1)
-        fig=plt.figure(figsize=(10,4),dpi=200)
-        ax=fig.add_subplot(1,1,1)
+        fig=plt.figure(figsize=(10,8),dpi=200)
+        ax=fig.add_subplot(plot_count,1,1)
         #ax.scatter(self.full_y_df.to_numpy(),novelty_mean)
-        ax.scatter(np.arange(novelty_mean.shape[0]),novelty_mean,alpha=0.7,s=1,c=self.full_y_df.to_numpy(),cmap='cool',)
-        fig.tight_layout
+        ax.scatter(np.arange(n),novelty_mean,alpha=0.7,s=2,c=y,cmap='cool',)
+        
+        ax=fig.add_subplot(plot_count,1,2)
+        ax.scatter(np.arange(n),y,alpha=0.7,s=2,c=novelty_mean,cmap='cool',)
+        
+        ax=fig.add_subplot(plot_count,1,3)
+        X=self.full_X_float_df.to_numpy()
+        yhat=LinearRegression().fit(X,y).predict(X)
+        ax.scatter(np.arange(n),(y-yhat)**2,alpha=0.7,s=2,c=novelty_mean,cmap='cool',)
+        ax.set_title('import ordered squared lin reg error')
+        fig.tight_layout()
         
     def viewComponents(self,num_cols=[6,9],keep_cats=False):
         n=self.full_X_float_df.shape[0]
