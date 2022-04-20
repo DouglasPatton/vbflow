@@ -22,14 +22,22 @@ class VBSummary(myLogger):
         self.full_X_float_df=pd.read_json(df_dict['full_float_X'])
         self.full_y_df=pd.read_json(df_dict['full_y'])
         self.X_nan_bool_df=pd.read_json(df_dict['X_nan_bool'])
-        self.cv_novelty=np.array(df_dict['cv_novelty'])
+        self.cv_novelty_predict=np.array(df_dict['cv_novelty_predict'])
+        self.cv_novelty_decision_function=np.array(df_dict['cv_novelty_decision_function'])
+        self.cv_novelty_score_samples=np.array(df_dict['cv_novelty_score_samples'])
         
         
-    def plotNoveltyVsY(self):
+    def plotNoveltyVsY(self,novelty_measure='predict'):
         plot_count=3
         y=self.full_y_df.to_numpy()
         n=y.shape[0]
-        novelty_mean=self.cv_novelty.mean(axis=1)
+        if novelty_measure=='predict':
+            novelty_mean=self.cv_novelty_predict.mean(axis=1)
+        elif novelty_measure=='decision_function':
+            novelty_mean=self.cv_novelty_decision_function.mean(axis=1)
+        elif novelty_measure=='score_samples':
+            novelty_mean=self.cv_novelty_score_samples.mean(axis=1)
+        else: assert False, f'novelty measure not recognized: {novelty_measure}'
         fig=plt.figure(figsize=(10,8),dpi=200)
         ax=fig.add_subplot(plot_count,1,1)
         ax.set_title('import ordered (horizontal), single class membership (vertical), true y (color))')

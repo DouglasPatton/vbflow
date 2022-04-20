@@ -183,9 +183,14 @@ class VBHelper(myLogger):
         X_json_s=X_float_df.to_json() #_json_s is json-string
         y_json_s=y_df_start_order.to_json()
         X_nan_bool_s=X_df_start_order.isnull().to_json() #matrix locations in X of missing values so we can plot them
-        
-        cv_novelty=self.cv_novelty_model.novelty_hat_
-        summary_data={'full_float_X':X_json_s,'full_y':y_json_s, 'X_nan_bool':X_nan_bool_s,'cv_novelty':cv_novelty.tolist()} 
+        summary_data={
+            'full_float_X':X_json_s,
+            'full_y':y_json_s,
+            'X_nan_bool':X_nan_bool_s,
+            'cv_novelty_predict':self.cv_novelty_model.novelty_hat_.tolist(),
+            'cv_novelty_decision_function':self.cv_novelty_model.decision_function_hat_.tolist(),
+            'cv_novelty_score_samples':self.cv_novelty_model.score_samples_hat_.tolist(),
+        } 
         self.summary_data=summary_data
         with open('summaryXy.json','w') as f:
             json.dump(summary_data,f) #saving a json of the summary data
