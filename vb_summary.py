@@ -32,18 +32,18 @@ class VBSummary(myLogger):
         novelty_mean=self.cv_novelty.mean(axis=1)
         fig=plt.figure(figsize=(10,8),dpi=200)
         ax=fig.add_subplot(plot_count,1,1)
-        ax.set_title('import ordered (horizontal), single class membership (vertical), yhat (color))')
+        ax.set_title('import ordered (horizontal), single class membership (vertical), true y (color))')
         #ax.scatter(self.full_y_df.to_numpy(),novelty_mean)
-        ax.scatter(np.arange(n),novelty_mean,alpha=0.7,s=2,c=y,cmap='cool',)
+        ax.scatter(np.arange(n),novelty_mean,alpha=0.7,s=10-4*novelty_mean,c=y,cmap='cool',)
         
         ax=fig.add_subplot(plot_count,1,2)
-        ax.scatter(np.arange(n),y,alpha=0.7,s=2,c=novelty_mean,cmap='plasma',)
-        
+        ax.scatter(np.arange(n),y,alpha=0.7,s=10-4*novelty_mean,c=novelty_mean,cmap='plasma',)
+        ax.set_title('import ordered (horizontal), true y (vertical), single class membership (color))')
         ax=fig.add_subplot(plot_count,1,3)
-        ax.set_title('import ordered (horizontal), yhat (vertical), single class membership (color))')
+        
         X=self.full_X_float_df.to_numpy()
         yhat=LinearRegression().fit(X,y).predict(X)
-        ax.scatter(np.arange(n),(y-yhat)**2,alpha=0.7,s=2,c=novelty_mean,cmap='plasma',)
+        ax.scatter(np.arange(n),(y-yhat)**2,alpha=0.7,s=10-4*novelty_mean,c=novelty_mean,cmap='plasma',)
         ax.set_title('import ordered (horizontal), squared lin-reg error (vertical), single class membership (color))')
         fig.tight_layout()
         
